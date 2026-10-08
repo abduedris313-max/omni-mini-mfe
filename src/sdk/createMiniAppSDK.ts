@@ -48,8 +48,7 @@ export function createMiniAppSDK(
       setItem: (key: string, val: any) => {
         try {
           localStorage.setItem(`miniapp_store_${appId}_${key}`, JSON.stringify(val));
-        } catch (e) {
-          console.warn('Storage set failed', e);
+        } catch {
         }
       },
       removeItem: (key: string) => {
