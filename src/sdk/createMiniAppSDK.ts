@@ -15,6 +15,7 @@ export function createMiniAppSDK(
     deductWallet: (amount: number, description: string, appId: string) => Promise<boolean>;
     grantedPermissions: Record<string, string[]>;
     requestPermission: (appId: string, permission: string) => Promise<boolean>;
+    requestConfirm: (title: string, message: string) => Promise<boolean>;
   }
 ): MiniAppBridgeSDK {
   const themeAPI = resolveMiniAppTheme(
@@ -87,8 +88,8 @@ export function createMiniAppSDK(
       hapticFeedback: (pattern = 'light') => {
         context.hapticFeedback(pattern);
       },
-      requestConfirm: async (_title: string, message: string) => {
-        return window.confirm(message);
+      requestConfirm: async (title: string, message: string) => {
+        return context.requestConfirm(title, message);
       },
     },
 

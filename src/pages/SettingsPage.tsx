@@ -34,6 +34,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     getPluggableSetting,
     availableApps,
     installedAppIds,
+    requestConfirm,
     showToast,
     hapticFeedback,
   } = useSuperApp();
@@ -57,8 +58,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     setExpandedAppId(expandedAppId === appId ? null : appId);
   };
 
-  const handleResetStorage = () => {
-    if (window.confirm('Reset all cached mini app data and reload defaults?')) {
+  const handleResetStorage = async () => {
+    const confirmed = await requestConfirm(
+      'Reset Storage',
+      'Reset all cached mini app data, themes, and reload defaults?'
+    );
+    if (confirmed) {
       localStorage.clear();
       showToast('Cache reset. Reloading...', 'info');
       setTimeout(() => window.location.reload(), 500);

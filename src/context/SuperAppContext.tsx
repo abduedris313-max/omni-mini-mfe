@@ -54,6 +54,7 @@ interface SuperAppContextValue {
   grantedPermissions: Record<string, string[]>;
   requestPermission: (appId: string, permission: string) => Promise<boolean>;
   revokePermission: (appId: string, permission: string) => void;
+  requestConfirm: (title: string, message: string) => Promise<boolean>;
 
   toasts: ToastItem[];
   showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -366,13 +367,34 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   });
 
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    resolve: (val: boolean) => void;
+  } | null>(null);
+
+  const requestConfirm = (title: string, message: string): Promise<boolean> => {
+    hapticFeedback('medium');
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        title,
+        message,
+        resolve: (val: boolean) => {
+          setConfirmDialog(null);
+          resolve(val);
+        },
+      });
+    });
+  };
+
   const requestPermission = async (appId: string, permission: string): Promise<boolean> => {
     const current = grantedPermissions[appId] || [];
     if (current.includes(permission)) return true;
 
-    // Simulate iOS permission modal prompt
-    const approved = window.confirm(
-      `"OmniMini" requests "${permission.toUpperCase()}" access on behalf of ${appId}. Allow access?`
+    // Use non-blocking in-app confirmation modal
+    const approved = await requestConfirm(
+      'Permission Request',
+      `"${appId}" is requesting "${permission.toUpperCase()}" access on OmniMini. Allow access?`
     );
 
     if (approved) {
@@ -456,6 +478,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         grantedPermissions,
         requestPermission,
         revokePermission,
+        requestConfirm,
         toasts,
         showToast,
         hapticFeedback,
@@ -464,6 +487,32 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       }}
     >
       {children}
+
+      {/* In-app iOS style Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 text-slate-100 shadow-2xl text-center space-y-4 animate-in slide-in-from-bottom-4 duration-150">
+            <h3 className="text-base font-bold text-white">{confirmDialog.title}</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">{confirmDialog.message}</p>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => confirmDialog.resolve(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-semibold text-xs text-slate-300 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmDialog.resolve(true)}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white transition shadow-md shadow-blue-600/30"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SuperAppContext.Provider>
   );
 };
