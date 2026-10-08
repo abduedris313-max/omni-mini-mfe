@@ -1,3 +1,4 @@
+import { OAuth2Client } from 'google-auth-library';
 import express, { Request, Response } from 'express';
 import { INITIAL_MINI_APPS, INITIAL_REVIEWS } from '../data/seedMiniApps';
 import { MiniAppManifest, MiniAppReview } from '../types/miniapp';
@@ -256,27 +257,81 @@ apiRouter.get('/developer/analytics', (_req: Request, res: Response) => {
   });
 });
 
-// POST /api/auth/google - One-click Google Authentication
-apiRouter.post('/auth/google', (req: Request, res: Response) => {
-  const { email, name, avatar } = req.body;
+// POST /api/auth/google - Secure Google Authentication using idToken
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-  const user = {
-    id: `usr-google-${Date.now()}`,
-    name: name || 'Google User',
-    email: email || 'user@gmail.com',
-    avatar:
-      avatar ||
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-    isGoogle: true,
-    walletBalance: 248.5,
-    role: 'developer',
-    joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    token: `oauth_mock_jwt_${Buffer.from(email || 'user').toString('base64')}_${Date.now()}`,
-  };
+apiRouter.post('/auth/google', async (req: Request, res: Response) => {
+  const { idToken } = req.body;
 
-  res.json({
-    success: true,
-    user,
-    message: 'Authenticated with Google successfully',
-  });
+  if (!idToken) {
+    return res.status(400).json({ success: false, error: 'Missing idToken' });
+  }
+
+  let email = '';
+  let name = '';
+  let avatar = '';
+
+  try {
+    // In development mode, allow a mock fallback if no GOOGLE_CLIENT_ID is set
+    if (process.env.NODE_ENV !== 'production' && !process.env.GOOGLE_CLIENT_ID) {
+      if (idToken.startsWith('mock_token_for_dev_')) {
+        const payloadBase64 = idToken.split('mock_token_for_dev_')[1];
+        if (payloadBase64) {
+          try {
+            const decodedStr = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+            const payload = JSON.parse(decodedStr);
+            email = payload.email || 'mock@example.com';
+            name = payload.name || 'Mock User';
+            avatar = payload.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+          } catch (e) {
+            console.error('Failed to parse mock token', e);
+          }
+        }
+      } else {
+        return res.status(401).json({ success: false, error: 'Invalid development token' });
+      }
+    } else {
+      // Secure token verification for production
+      const ticket = await googleClient.verifyIdToken({
+        idToken: idToken,
+        audience: process.env.GOOGLE_CLIENT_ID, // Specify the CLIENT_ID of the app that accesses the backend
+      });
+      const payload = ticket.getPayload();
+
+      if (!payload) {
+        return res.status(401).json({ success: false, error: 'Invalid Google token payload' });
+      }
+
+      email = payload.email || '';
+      name = payload.name || '';
+      avatar = payload.picture || '';
+    }
+
+    if (!email) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: missing email' });
+    }
+
+    const user = {
+      id: `usr-google-${Date.now()}`, // In a real app, use a DB lookup by email/sub
+      name: name || 'Google User',
+      email: email,
+      avatar:
+        avatar ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+      isGoogle: true,
+      walletBalance: 248.5,
+      role: 'developer',
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      token: `auth_jwt_${Buffer.from(email).toString('base64')}_${Date.now()}`,
+    };
+
+    res.json({
+      success: true,
+      user,
+      message: 'Authenticated with Google successfully',
+    });
+  } catch (error) {
+    console.error('Google token verification failed', error);
+    return res.status(401).json({ success: false, error: 'Unauthorized: Invalid Google token' });
+  }
 });

@@ -33,7 +33,7 @@ interface WalletTransaction {
 interface SuperAppContextValue {
   user: SuperAppUser | null;
   setUser: (user: SuperAppUser | null) => void;
-  signInWithGoogle: (customData?: Partial<SuperAppUser>) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   signOut: () => void;
 
   settings: SuperAppSettings;
@@ -172,8 +172,8 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const signInWithGoogle = async (customData?: Partial<SuperAppUser>) => {
-    const googleUser = await repositoryService.authenticateGoogle(customData);
+  const signInWithGoogle = async (idToken: string) => {
+    const googleUser = await repositoryService.authenticateGoogle(idToken);
     setUser(googleUser);
     showToast(`Welcome back, ${googleUser.name}! (Signed in via Google)`, 'success');
     hapticFeedback('success');

@@ -269,12 +269,12 @@ export const repositoryService = {
     };
   },
 
-  async authenticateGoogle(googleData?: Partial<SuperAppUser>): Promise<SuperAppUser> {
+  async authenticateGoogle(idToken: string): Promise<SuperAppUser> {
     try {
       const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(googleData || {}),
+        body: JSON.stringify({ idToken }),
       });
       if (res.ok) {
         const json = await res.json();
@@ -284,13 +284,31 @@ export const repositoryService = {
       console.warn('Google Auth API unreachable, generating local session', e);
     }
 
+    // Parse the mock token to extract user info
+    let mockName = 'Alex Chen (Google Account)';
+    let mockEmail = 'alex.chen@gmail.com';
+    let mockAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+
+    if (idToken && idToken.startsWith('mock_token_for_dev_')) {
+      const payloadBase64 = idToken.split('mock_token_for_dev_')[1];
+      if (payloadBase64) {
+        try {
+          const decodedStr = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+          const payload = JSON.parse(decodedStr);
+          if (payload.name) mockName = payload.name;
+          if (payload.email) mockEmail = payload.email;
+          if (payload.picture) mockAvatar = payload.picture;
+        } catch (e) {
+          // Ignore
+        }
+      }
+    }
+
     return {
       id: `usr-google-${Date.now()}`,
-      name: googleData?.name || 'Alex Chen (Google Account)',
-      email: googleData?.email || 'alex.chen@gmail.com',
-      avatar:
-        googleData?.avatar ||
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+      name: mockName,
+      email: mockEmail,
+      avatar: mockAvatar,
       isGoogle: true,
       walletBalance: 320.0,
       role: 'developer',
