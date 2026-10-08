@@ -32,26 +32,27 @@ apiRouter.get('/health', (_req: Request, res: Response) => {
 // GET /api/miniapps - Query all mini apps
 apiRouter.get('/miniapps', (req: Request, res: Response) => {
   const { category, search, status } = req.query;
-  let results = [...miniAppsRegistry];
 
-  if (category && category !== 'all') {
-    results = results.filter((app) => app.category === category);
-  }
+  const isCategoryFilterActive = category && category !== 'all';
+  const isStatusFilterActive = !!status;
+  const isSearchFilterActive = search && typeof search === 'string';
+  const q = isSearchFilterActive ? (search as string).toLowerCase() : '';
 
-  if (status) {
-    results = results.filter((app) => app.status === status);
-  }
-
-  if (search && typeof search === 'string') {
-    const q = search.toLowerCase();
-    results = results.filter(
-      (app) =>
+  const results = miniAppsRegistry.filter((app) => {
+    if (isCategoryFilterActive && app.category !== category) return false;
+    if (isStatusFilterActive && app.status !== status) return false;
+    if (isSearchFilterActive) {
+      if (!(
         app.name.toLowerCase().includes(q) ||
         app.summary.toLowerCase().includes(q) ||
         app.author.name.toLowerCase().includes(q) ||
         app.category.toLowerCase().includes(q)
-    );
-  }
+      )) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   res.json({
     success: true,
