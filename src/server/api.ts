@@ -109,6 +109,13 @@ apiRouter.post('/miniapps/publish', (req: Request, res: Response) => {
     });
   }
 
+  if (id && !/^[a-zA-Z0-9_-]+$/.test(id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid id format. Only alphanumeric characters, dashes, and underscores are allowed.',
+    });
+  }
+
   const generatedId = id || name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000);
 
   // Check if exists
