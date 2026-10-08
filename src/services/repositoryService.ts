@@ -8,8 +8,7 @@ function getLocalApps(): MiniAppManifest[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_APPS);
     if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.warn('Failed to parse local apps cache', e);
+  } catch {
   }
   return INITIAL_MINI_APPS;
 }
