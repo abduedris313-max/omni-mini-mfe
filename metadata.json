@@ -1,0 +1,6 @@
+{
+  "name": "OmniMini: Micro Frontend Super App Platform",
+  "description": "Mobile-first iOS-style Micro Frontend Super App platform with shared authentication, pluggable settings, dynamic mini app runtime, developer console, backend repository, and developer guide.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
