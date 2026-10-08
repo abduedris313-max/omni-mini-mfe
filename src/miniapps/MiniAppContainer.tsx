@@ -42,7 +42,11 @@ export const MiniAppContainer: React.FC = () => {
         <p className="text-xs text-slate-400 mt-2">The requested mini app could not be loaded from repository.</p>
         <button
           onClick={closeMiniApp}
-          className="mt-4 px-4 py-2 rounded-xl bg-blue-600 text-xs font-semibold text-white"
+          style={{
+            backgroundColor: context.themeTokens.accentPrimary,
+            color: context.themeTokens.accentContrast,
+          }}
+          className="mt-4 px-4 py-2 rounded-xl text-xs font-semibold transition"
         >
           Return to Home
         </button>
@@ -98,7 +102,12 @@ export const MiniAppContainer: React.FC = () => {
                 sdk.ui.showToast(`Pinged Super App bridge from ${app.name}`, 'success');
                 sdk.ui.hapticFeedback('success');
               }}
-              className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white shadow-lg shadow-blue-600/30 transition"
+              style={{
+                backgroundColor: sdk.theme.tokens.accentPrimary,
+                color: sdk.theme.tokens.accentContrast,
+                boxShadow: `0 4px 14px ${sdk.theme.tokens.accentGlow}`,
+              }}
+              className="w-full py-3 rounded-2xl font-bold text-xs transition ios-active shadow-lg"
             >
               Test Bridge Invocation
             </button>

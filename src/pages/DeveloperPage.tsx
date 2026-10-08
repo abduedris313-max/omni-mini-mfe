@@ -471,7 +471,12 @@ export const DeveloperPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 ios-active"
+                    style={{
+                      backgroundColor: themeTokens.accentPrimary,
+                      color: themeTokens.accentContrast,
+                      boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
+                    }}
+                    className="w-full py-3 rounded-2xl font-bold text-xs transition flex items-center justify-center gap-2 ios-active shadow-lg"
                   >
                     {isSubmitting ? (
                       <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

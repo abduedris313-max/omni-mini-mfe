@@ -83,7 +83,7 @@ export interface SuperAppUser {
 
 export interface SuperAppSettings {
   theme: 'dark' | 'light' | 'system';
-  accentColor: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose';
+  accentColor: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
   hapticsEnabled: boolean;
   soundEffects: boolean;
   biometricAuth: boolean;

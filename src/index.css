@@ -7,7 +7,7 @@
     --safe-area-top: env(safe-area-inset-top, 0px);
     --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
-    /* Default Fallback CSS Variables (Dark mode defaults) */
+    /* Default Base Variables (Dark Mode) */
     --app-bg-base: #020617;
     --app-bg-surface: #0b1120;
     --app-bg-card: rgba(15, 23, 42, 0.85);
@@ -19,12 +19,12 @@
     --app-text-secondary: #94a3b8;
     --app-text-muted: #64748b;
     --app-text-inverse: #020617;
-    --app-text-accent: #3b82f6;
+    --app-text-accent: var(--app-accent-primary, #3b82f6);
 
     --app-border-subtle: rgba(255, 255, 255, 0.06);
     --app-border-default: rgba(255, 255, 255, 0.12);
     --app-border-strong: rgba(255, 255, 255, 0.22);
-    --app-border-accent: #3b82f6;
+    --app-border-accent: var(--app-accent-primary, #3b82f6);
 
     --app-accent-primary: #3b82f6;
     --app-accent-hover: #2563eb;
@@ -37,7 +37,7 @@
     --app-error: #ef4444;
     --app-info: #3b82f6;
 
-    /* Mini App Variables Mirror */
+    /* Mini App Mirror Variables */
     --mini-bg-base: var(--app-bg-base);
     --mini-bg-surface: var(--app-bg-surface);
     --mini-bg-card: var(--app-bg-card);
@@ -49,12 +49,12 @@
     --mini-text-secondary: var(--app-text-secondary);
     --mini-text-muted: var(--app-text-muted);
     --mini-text-inverse: var(--app-text-inverse);
-    --mini-text-accent: var(--app-text-accent);
+    --mini-text-accent: var(--app-accent-primary);
 
     --mini-border-subtle: var(--app-border-subtle);
     --mini-border-default: var(--app-border-default);
     --mini-border-strong: var(--app-border-strong);
-    --mini-border-accent: var(--app-border-accent);
+    --mini-border-accent: var(--app-accent-primary);
 
     --mini-accent-primary: var(--app-accent-primary);
     --mini-accent-hover: var(--app-accent-hover);
@@ -75,12 +75,12 @@
     --app-text-secondary: #475569;
     --app-text-muted: #94a3b8;
     --app-text-inverse: #ffffff;
-    --app-text-accent: #2563eb;
+    --app-text-accent: var(--app-accent-primary, #2563eb);
 
     --app-border-subtle: rgba(0, 0, 0, 0.05);
     --app-border-default: rgba(0, 0, 0, 0.10);
     --app-border-strong: rgba(0, 0, 0, 0.20);
-    --app-border-accent: #2563eb;
+    --app-border-accent: var(--app-accent-primary, #2563eb);
   }
 
   body {
@@ -142,13 +142,13 @@
   box-shadow: 0 0 20px var(--app-accent-glow) !important;
 }
 
-/* Light Mode Overrides for Tailwind Slate Hardcoded Elements */
+/* Light Mode Background & Border Mappings for Tailwind Elements */
 html.light .bg-slate-950 {
-  background-color: var(--app-bg-base) !important;
+  background-color: var(--app-bg-base);
 }
 
 html.light .bg-slate-900 {
-  background-color: var(--app-bg-card) !important;
+  background-color: var(--app-bg-card);
 }
 
 html.light .bg-slate-900\/80,
@@ -157,17 +157,17 @@ html.light .bg-slate-900\/90,
 html.light .bg-slate-900\/50,
 html.light .bg-slate-950\/85,
 html.light .bg-slate-950\/80 {
-  background-color: var(--app-bg-glass) !important;
+  background-color: var(--app-bg-glass);
 }
 
 html.light .bg-slate-800 {
-  background-color: var(--app-bg-surface) !important;
+  background-color: var(--app-bg-surface);
 }
 
 html.light .bg-slate-800\/80,
 html.light .bg-slate-800\/60,
 html.light .bg-slate-800\/50 {
-  background-color: rgba(241, 245, 249, 0.85) !important;
+  background-color: rgba(241, 245, 249, 0.85);
 }
 
 html.light .border-slate-800,
@@ -175,22 +175,18 @@ html.light .border-slate-800\/80,
 html.light .border-slate-800\/60,
 html.light .border-slate-700,
 html.light .border-slate-700\/60 {
-  border-color: var(--app-border-default) !important;
+  border-color: var(--app-border-default);
 }
 
 html.light .text-slate-100 {
-  color: var(--app-text-primary) !important;
-}
-
-html.light .text-white {
-  color: var(--app-text-primary) !important;
+  color: var(--app-text-primary);
 }
 
 html.light .text-slate-200,
 html.light .text-slate-300 {
-  color: var(--app-text-secondary) !important;
+  color: var(--app-text-secondary);
 }
 
 html.light .text-slate-400 {
-  color: var(--app-text-muted) !important;
+  color: var(--app-text-muted);
 }

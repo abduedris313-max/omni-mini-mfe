@@ -10,10 +10,11 @@ import { DeveloperPage } from './pages/DeveloperPage';
 import { WalletPage } from './pages/WalletPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuthModal } from './pages/AuthModal';
+import { SetupWizardModal } from './components/SetupWizardModal';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 const SuperAppContent: React.FC = () => {
-  const { currentTab, toasts } = useSuperApp();
+  const { currentTab, toasts, themeTokens } = useSuperApp();
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const renderActivePage = () => {
@@ -55,7 +56,7 @@ const SuperAppContent: React.FC = () => {
             {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
             {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
             {toast.type === 'warning' && <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />}
-            {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+            {toast.type === 'info' && <Info className="w-4 h-4 shrink-0" style={{ color: themeTokens.accentPrimary }} />}
             <span className="flex-1 truncate">{toast.message}</span>
           </div>
         ))}
@@ -66,6 +67,7 @@ const SuperAppContent: React.FC = () => {
         <BottomNavBar />
         <MiniAppContainer />
         <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+        <SetupWizardModal />
       </IOSDeviceFrame>
     </>
   );

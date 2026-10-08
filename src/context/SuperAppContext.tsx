@@ -75,6 +75,21 @@ interface SuperAppContextValue {
   // Global repository cache
   availableApps: MiniAppManifest[];
   refreshApps: () => Promise<void>;
+
+  // First-Time User Setup Wizard
+  isSetupWizardOpen: boolean;
+  openSetupWizard: () => void;
+  closeSetupWizard: () => void;
+  completeSetupWizard: (data: {
+    theme?: 'dark' | 'light' | 'system';
+    accentColor?: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
+    deviceBezel?: boolean;
+    displayName?: string;
+    role?: 'consumer' | 'developer' | 'admin';
+    starterBalance?: number;
+    installedAppIds?: string[];
+    enablePermissions?: boolean;
+  }) => void;
 }
 
 const SuperAppContext = createContext<SuperAppContextValue | undefined>(undefined);
@@ -459,13 +474,26 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     setAvailableApps(apps);
   };
 
+  // System theme preference listener for responsive system mode
+  const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    media.addEventListener('change', handler);
+    return () => media.removeEventListener('change', handler);
+  }, []);
+
   // Theming Engine resolution for Super App
   const isDark =
     settings.theme === 'dark' ||
-    (settings.theme === 'system' &&
-      (typeof window !== 'undefined'
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        : true));
+    (settings.theme === 'system' && systemPrefersDark);
 
   const themeTokens = resolveSuperAppTheme(settings);
   const superAppStyle = superAppTokensToCSSVariables(themeTokens) as React.CSSProperties;
@@ -483,6 +511,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       const vars = superAppTokensToCSSVariables(themeTokens);
       Object.entries(vars).forEach(([k, v]) => {
         root.style.setProperty(k, v);
+        document.body.style.setProperty(k, v);
       });
     }
 
@@ -496,6 +525,104 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     });
   }, [settings, isDark, themeTokens, availableApps]);
+
+  // 9. First Time User Setup Wizard
+  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState<boolean>(() => {
+    try {
+      const completed = localStorage.getItem('omnimini_setup_completed_v2');
+      return !completed;
+    } catch {
+      return false;
+    }
+  });
+
+  const openSetupWizard = () => {
+    setIsSetupWizardOpen(true);
+    hapticFeedback('medium');
+  };
+
+  const closeSetupWizard = () => {
+    setIsSetupWizardOpen(false);
+    hapticFeedback('light');
+  };
+
+  const completeSetupWizard = (data: {
+    theme?: 'dark' | 'light' | 'system';
+    accentColor?: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
+    deviceBezel?: boolean;
+    displayName?: string;
+    role?: 'consumer' | 'developer' | 'admin';
+    starterBalance?: number;
+    installedAppIds?: string[];
+    enablePermissions?: boolean;
+  }) => {
+    if (data.theme) updateSetting('theme', data.theme);
+    if (data.accentColor) updateSetting('accentColor', data.accentColor);
+    if (data.deviceBezel !== undefined) updateSetting('deviceBezel', data.deviceBezel);
+
+    if (data.displayName || data.role) {
+      setUserState((prev) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          name: data.displayName || prev.name,
+          role: data.role || prev.role,
+        };
+        localStorage.setItem('omnimini_user_v2', JSON.stringify(next));
+        return next;
+      });
+    }
+
+    if (data.starterBalance && data.starterBalance > 0) {
+      setWalletBalance((prev) => {
+        const next = prev + data.starterBalance!;
+        localStorage.setItem('omnimini_wallet_balance_v2', next.toString());
+        return next;
+      });
+      const welcomeTx: WalletTransaction = {
+        id: `tx-welcome-${Date.now()}`,
+        appId: 'omnimini-system',
+        appName: 'OmniMini Super App',
+        amount: data.starterBalance,
+        type: 'credit',
+        description: 'First Time User Onboarding Starter Credit',
+        timestamp: 'Just now',
+      };
+      setTransactions((prev) => {
+        const next = [welcomeTx, ...prev];
+        localStorage.setItem('omnimini_transactions_v2', JSON.stringify(next));
+        return next;
+      });
+    }
+
+    if (data.installedAppIds && data.installedAppIds.length > 0) {
+      setInstalledAppIds(data.installedAppIds);
+      localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(data.installedAppIds));
+    }
+
+    if (data.enablePermissions) {
+      const fullPerms = {
+        'paypulse-wallet': ['camera', 'biometrics', 'auth'],
+        'urbanride-transit': ['location', 'notifications', 'auth'],
+        'foodbite-express': ['location', 'notifications', 'auth'],
+        'fitsync-health': ['notifications', 'storage'],
+        'noteflow-editor': ['storage', 'clipboard'],
+        'codecraft-scratchpad': ['storage', 'clipboard'],
+      };
+      setGrantedPermissions(fullPerms);
+      localStorage.setItem('omnimini_permissions_v2', JSON.stringify(fullPerms));
+    }
+
+    try {
+      localStorage.setItem('omnimini_setup_completed_v2', 'true');
+    } catch (e) {
+      console.warn('Failed saving setup flag', e);
+    }
+
+    setIsSetupWizardOpen(false);
+    showToast('🎉 Welcome to OmniMini! Personalization saved.', 'success');
+    hapticFeedback('success');
+  };
 
   useEffect(() => {
     refreshApps();
@@ -537,6 +664,10 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         hapticFeedback,
         availableApps,
         refreshApps,
+        isSetupWizardOpen,
+        openSetupWizard,
+        closeSetupWizard,
+        completeSetupWizard,
       }}
     >
       {children}
@@ -544,21 +675,41 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       {/* In-app iOS style Confirmation Dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 text-slate-100 shadow-2xl text-center space-y-4 animate-in slide-in-from-bottom-4 duration-150">
-            <h3 className="text-base font-bold text-white">{confirmDialog.title}</h3>
-            <p className="text-xs text-slate-300 leading-relaxed">{confirmDialog.message}</p>
+          <div
+            style={{
+              backgroundColor: themeTokens.bgCard,
+              borderColor: themeTokens.borderDefault,
+              color: themeTokens.textPrimary,
+            }}
+            className="w-full max-w-sm rounded-3xl border p-6 shadow-2xl text-center space-y-4 animate-in slide-in-from-bottom-4 duration-150"
+          >
+            <h3 className="text-base font-bold" style={{ color: themeTokens.textPrimary }}>
+              {confirmDialog.title}
+            </h3>
+            <p className="text-xs leading-relaxed" style={{ color: themeTokens.textSecondary }}>
+              {confirmDialog.message}
+            </p>
             <div className="flex gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => confirmDialog.resolve(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-semibold text-xs text-slate-300 transition"
+                style={{
+                  backgroundColor: themeTokens.bgSurface,
+                  color: themeTokens.textSecondary,
+                }}
+                className="flex-1 py-2.5 rounded-xl font-semibold text-xs transition ios-active"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => confirmDialog.resolve(true)}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white transition shadow-md shadow-blue-600/30"
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                  boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
+                }}
+                className="flex-1 py-2.5 rounded-xl font-bold text-xs transition ios-active shadow-md"
               >
                 Confirm
               </button>

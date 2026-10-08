@@ -7,7 +7,14 @@ interface IOSDeviceFrameProps {
 }
 
 export const IOSDeviceFrame: React.FC<IOSDeviceFrameProps> = ({ children }) => {
-  const { settings, activeMiniAppId, availableApps, themeTokens, isDark } = useSuperApp();
+  const {
+    settings,
+    activeMiniAppId,
+    availableApps,
+    themeTokens,
+    isDark,
+    superAppStyle,
+  } = useSuperApp();
   const [time, setTime] = useState('9:41');
 
   useEffect(() => {
@@ -30,6 +37,7 @@ export const IOSDeviceFrame: React.FC<IOSDeviceFrameProps> = ({ children }) => {
       <div
         className="min-h-screen flex justify-center transition-colors duration-200"
         style={{
+          ...superAppStyle,
           backgroundColor: themeTokens.bgBase,
           color: themeTokens.textPrimary,
         }}
@@ -96,6 +104,7 @@ export const IOSDeviceFrame: React.FC<IOSDeviceFrameProps> = ({ children }) => {
     <div
       className="min-h-screen flex items-center justify-center p-0 sm:p-4 transition-colors duration-200"
       style={{
+        ...superAppStyle,
         backgroundColor: isDark ? '#080c14' : '#e2e8f0',
         color: themeTokens.textPrimary,
       }}

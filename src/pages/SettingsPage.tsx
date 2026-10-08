@@ -14,6 +14,8 @@ import {
   ChevronRight,
   LogOut,
   RotateCcw,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -35,12 +37,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     hapticFeedback,
     themeTokens,
     isDark,
+    openSetupWizard,
   } = useSuperApp();
 
   const [expandedAppId, setExpandedAppId] = useState<string | null>('paypulse-wallet');
 
   const accentColors: Array<{
-    id: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose';
+    id: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
     label: string;
     bg: string;
     hex: string;
@@ -50,6 +53,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     { id: 'emerald', label: 'Emerald Green', bg: 'bg-emerald-500', hex: '#10b981' },
     { id: 'amber', label: 'Sunset Amber', bg: 'bg-amber-500', hex: '#f59e0b' },
     { id: 'rose', label: 'Crimson Rose', bg: 'bg-rose-500', hex: '#f43f5e' },
+    { id: 'cyan', label: 'Cyan Sky', bg: 'bg-cyan-500', hex: '#06b6d4' },
+    { id: 'violet', label: 'Electric Violet', bg: 'bg-violet-500', hex: '#8b5cf6' },
   ];
 
   const installedAppsWithSettings = availableApps.filter(
@@ -276,7 +281,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
               </div>
             </div>
 
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
               {accentColors.map((color) => {
                 const isSelected = settings.accentColor === color.id;
                 return (
@@ -289,17 +294,64 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
                     }}
                     style={{
                       backgroundColor: color.hex,
-                      transform: isSelected ? 'scale(1.2)' : 'scale(1)',
-                      boxShadow: isSelected ? `0 0 10px ${color.hex}` : 'none',
+                      transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+                      boxShadow: isSelected ? `0 0 12px ${color.hex}` : 'none',
                       border: isSelected ? '2px solid white' : '1px solid rgba(0,0,0,0.2)',
                     }}
-                    className="w-6 h-6 rounded-full transition-transform duration-150 cursor-pointer"
+                    className="w-7 h-7 rounded-full transition-transform duration-150 cursor-pointer flex items-center justify-center shadow-sm"
                     aria-label={color.label}
                     title={color.label}
-                  />
+                  >
+                    {isSelected && <Check className="w-4 h-4 text-white drop-shadow" />}
+                  </button>
                 );
               })}
             </div>
+          </div>
+
+          {/* First-Time User Setup Wizard Launcher */}
+          <div className="p-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="p-2 rounded-xl"
+                style={{
+                  backgroundColor: themeTokens.bgSurface,
+                  color: themeTokens.accentPrimary,
+                }}
+              >
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div
+                  className="text-xs font-semibold"
+                  style={{ color: themeTokens.textPrimary }}
+                >
+                  Setup Wizard
+                </div>
+                <div
+                  className="text-[11px]"
+                  style={{ color: themeTokens.textSecondary }}
+                >
+                  Re-launch first-time user configuration
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                openSetupWizard();
+                hapticFeedback('medium');
+              }}
+              style={{
+                backgroundColor: themeTokens.accentMuted,
+                color: themeTokens.accentPrimary,
+                borderColor: themeTokens.borderAccent,
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold border transition ios-active flex items-center gap-1 shadow-sm"
+            >
+              <span>Launch</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Device Frame Viewport Toggle */}

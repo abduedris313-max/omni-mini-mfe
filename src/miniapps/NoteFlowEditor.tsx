@@ -107,11 +107,12 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
           <button
             key={cat}
             onClick={() => { setActiveCategory(cat); sdk.ui.hapticFeedback('light'); }}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize whitespace-nowrap transition ${
-              activeCategory === cat
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
+            style={{
+              backgroundColor: activeCategory === cat ? sdk.theme.tokens.accentPrimary : sdk.theme.tokens.bgSurface,
+              color: activeCategory === cat ? sdk.theme.tokens.accentContrast : sdk.theme.tokens.textSecondary,
+              borderColor: activeCategory === cat ? 'transparent' : sdk.theme.tokens.borderDefault,
+            }}
+            className="px-3 py-1.5 rounded-full text-xs font-semibold capitalize whitespace-nowrap transition border"
           >
             {cat}
           </button>
@@ -120,9 +121,17 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
 
       {/* Create Note Section */}
       {isCreating ? (
-        <div className="rounded-3xl bg-slate-900 border border-purple-500/40 p-4 space-y-3 shadow-lg shadow-purple-950/20">
+        <div
+          style={{
+            backgroundColor: sdk.theme.tokens.bgCard,
+            borderColor: sdk.theme.tokens.borderDefault,
+          }}
+          className="rounded-3xl border p-4 space-y-3 shadow-lg"
+        >
           <div className="flex justify-between items-center text-xs">
-            <span className="font-semibold text-purple-400">New Note in #{defaultCategory}</span>
+            <span className="font-semibold" style={{ color: sdk.theme.tokens.accentPrimary }}>
+              New Note in #{defaultCategory}
+            </span>
             <button
               onClick={() => setIsCreating(false)}
               className="text-slate-400 hover:text-white"
@@ -136,7 +145,7 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Title..."
-            className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm font-bold text-white focus:outline-none focus:border-purple-500"
+            className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm font-bold text-white focus:outline-none"
           />
 
           <textarea
@@ -144,12 +153,17 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="Write your thoughts..."
             rows={3}
-            className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-purple-500 resize-none"
+            className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none resize-none"
           />
 
           <button
             onClick={addNote}
-            className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center justify-center gap-1.5"
+            style={{
+              backgroundColor: sdk.theme.tokens.accentPrimary,
+              color: sdk.theme.tokens.accentContrast,
+              boxShadow: `0 4px 14px ${sdk.theme.tokens.accentGlow}`,
+            }}
+            className="w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md ios-active"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Save Note</span>
@@ -158,9 +172,14 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
       ) : (
         <button
           onClick={() => { setIsCreating(true); sdk.ui.hapticFeedback('light'); }}
-          className="w-full py-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-dashed border-slate-700 text-xs font-semibold text-slate-300 transition flex items-center justify-center gap-2"
+          style={{
+            backgroundColor: sdk.theme.tokens.bgSurface,
+            borderColor: sdk.theme.tokens.borderDefault,
+            color: sdk.theme.tokens.textPrimary,
+          }}
+          className="w-full py-3 rounded-2xl border border-dashed text-xs font-semibold transition flex items-center justify-center gap-2"
         >
-          <Plus className="w-4 h-4 text-purple-400" />
+          <Plus className="w-4 h-4" style={{ color: sdk.theme.tokens.accentPrimary }} />
           <span>Add New Note in #{defaultCategory}</span>
         </button>
       )}

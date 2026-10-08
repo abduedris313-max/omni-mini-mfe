@@ -142,7 +142,13 @@ export const FitSyncApp: React.FC<FitSyncProps> = ({ sdk }) => {
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-3 backdrop-blur-md">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400">
+              <div
+                className="p-2 rounded-xl"
+                style={{
+                  backgroundColor: sdk.theme.tokens.accentMuted,
+                  color: sdk.theme.tokens.accentPrimary,
+                }}
+              >
                 <Droplet className="w-4 h-4" />
               </div>
               <div>
@@ -150,24 +156,44 @@ export const FitSyncApp: React.FC<FitSyncProps> = ({ sdk }) => {
                 <p className="text-[11px] text-slate-400">Target: {waterTarget} ml</p>
               </div>
             </div>
-            <span className="text-xs font-mono text-blue-400 font-bold">{waterPercentage}%</span>
+            <span
+              className="text-xs font-mono font-bold"
+              style={{ color: sdk.theme.tokens.accentPrimary }}
+            >
+              {waterPercentage}%
+            </span>
           </div>
 
           <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${waterPercentage}%` }} />
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${waterPercentage}%`,
+                backgroundColor: sdk.theme.tokens.accentPrimary,
+              }}
+            />
           </div>
 
           <div className="flex gap-2">
             <button
               onClick={() => addWater(250)}
-              className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-blue-300 border border-slate-700 transition flex items-center justify-center gap-1.5 ios-active"
+              style={{
+                color: sdk.theme.tokens.accentPrimary,
+                borderColor: sdk.theme.tokens.borderDefault,
+              }}
+              className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold border transition flex items-center justify-center gap-1.5 ios-active"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+250ml Glass</span>
             </button>
             <button
               onClick={() => addWater(500)}
-              className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30 ios-active"
+              style={{
+                backgroundColor: sdk.theme.tokens.accentPrimary,
+                color: sdk.theme.tokens.accentContrast,
+                boxShadow: `0 4px 14px ${sdk.theme.tokens.accentGlow}`,
+              }}
+              className="flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md ios-active"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+500ml Bottle</span>

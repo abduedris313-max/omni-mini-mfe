@@ -70,6 +70,33 @@ export const ACCENT_COLOR_MAP: Record<
     lightText: '#be123c',
     gradient: 'from-rose-500 to-pink-600',
   },
+  cyan: {
+    primary: '#06b6d4',
+    hover: '#0891b2',
+    muted: 'rgba(6, 182, 212, 0.15)',
+    glow: 'rgba(6, 182, 212, 0.35)',
+    lightPrimary: '#0891b2',
+    lightText: '#0e7490',
+    gradient: 'from-cyan-500 to-blue-600',
+  },
+  violet: {
+    primary: '#8b5cf6',
+    hover: '#7c3aed',
+    muted: 'rgba(139, 92, 246, 0.15)',
+    glow: 'rgba(139, 92, 246, 0.35)',
+    lightPrimary: '#7c3aed',
+    lightText: '#6d28d9',
+    gradient: 'from-violet-500 to-purple-600',
+  },
+  orange: {
+    primary: '#f97316',
+    hover: '#ea580c',
+    muted: 'rgba(249, 115, 22, 0.15)',
+    glow: 'rgba(249, 115, 22, 0.35)',
+    lightPrimary: '#ea580c',
+    lightText: '#c2410c',
+    gradient: 'from-orange-500 to-amber-600',
+  },
 };
 
 /**
