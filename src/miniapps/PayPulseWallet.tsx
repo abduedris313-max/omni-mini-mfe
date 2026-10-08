@@ -176,32 +176,60 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
       </div>
 
       {activeTab === 'send' && (
-        <div className="space-y-4 rounded-3xl bg-slate-900/90 border border-slate-800/80 p-5 backdrop-blur-md">
-          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-            <Send className="w-4 h-4 text-blue-400" />
+        <div
+          className="space-y-4 rounded-3xl border p-5 backdrop-blur-md transition-colors"
+          style={{
+            backgroundColor: sdk.theme.tokens.bgCard,
+            borderColor: sdk.theme.tokens.borderDefault,
+          }}
+        >
+          <h3
+            className="text-sm font-semibold flex items-center gap-2"
+            style={{ color: sdk.theme.tokens.textPrimary }}
+          >
+            <Send className="w-4 h-4" style={{ color: sdk.theme.tokens.accentPrimary }} />
             Instant Peer Transfer
           </h3>
 
           <div>
-            <label className="text-xs text-slate-400 font-medium">Recipient Omni Tag or Email</label>
+            <label className="text-xs font-medium" style={{ color: sdk.theme.tokens.textSecondary }}>
+              Recipient Omni Tag or Email
+            </label>
             <input
               type="text"
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
-              className="mt-1.5 w-full px-3.5 py-2.5 rounded-xl bg-slate-800/70 border border-slate-700 text-sm text-white focus:outline-none focus:border-blue-500 transition"
+              className="mt-1.5 w-full px-3.5 py-2.5 rounded-xl border text-sm transition focus:outline-none"
+              style={{
+                backgroundColor: sdk.theme.tokens.bgInput,
+                borderColor: sdk.theme.tokens.borderDefault,
+                color: sdk.theme.tokens.textPrimary,
+              }}
               placeholder="user@omnimini.dev"
             />
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 font-medium">Transfer Amount ({currencySymbol})</label>
+            <label className="text-xs font-medium" style={{ color: sdk.theme.tokens.textSecondary }}>
+              Transfer Amount ({currencySymbol})
+            </label>
             <div className="relative mt-1.5">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{currencySymbol}</span>
+              <span
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold"
+                style={{ color: sdk.theme.tokens.textSecondary }}
+              >
+                {currencySymbol}
+              </span>
               <input
                 type="number"
                 value={sendAmount}
                 onChange={(e) => setSendAmount(e.target.value)}
-                className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-slate-800/70 border border-slate-700 text-base font-bold text-white focus:outline-none focus:border-blue-500 transition"
+                className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border text-base font-bold transition focus:outline-none"
+                style={{
+                  backgroundColor: sdk.theme.tokens.bgInput,
+                  borderColor: sdk.theme.tokens.borderDefault,
+                  color: sdk.theme.tokens.textPrimary,
+                }}
                 placeholder="0.00"
               />
             </div>
@@ -214,7 +242,12 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
                 key={preset}
                 type="button"
                 onClick={() => { setSendAmount(preset.toFixed(2)); sdk.ui.hapticFeedback('light'); }}
-                className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/60 text-xs font-semibold text-slate-300 transition"
+                className="flex-1 py-1.5 rounded-lg border text-xs font-semibold transition"
+                style={{
+                  backgroundColor: sdk.theme.tokens.bgSurface,
+                  borderColor: sdk.theme.tokens.borderDefault,
+                  color: sdk.theme.tokens.textSecondary,
+                }}
               >
                 +{currencySymbol}{preset}
               </button>
@@ -224,7 +257,12 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
           <button
             onClick={handleSend}
             disabled={isProcessing}
-            className="w-full mt-2 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 font-semibold text-sm text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 ios-active"
+            className="w-full mt-2 py-3 rounded-2xl font-semibold text-sm transition flex items-center justify-center gap-2 shadow-lg ios-active"
+            style={{
+              backgroundColor: sdk.theme.tokens.accentPrimary,
+              color: sdk.theme.tokens.accentContrast,
+              boxShadow: `0 8px 24px ${sdk.theme.tokens.accentGlow}`,
+            }}
           >
             {isProcessing ? (
               <span className="flex items-center gap-2">
@@ -242,20 +280,35 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
       )}
 
       {activeTab === 'receive' && (
-        <div className="text-center space-y-4 rounded-3xl bg-slate-900/90 border border-slate-800/80 p-6 backdrop-blur-md">
+        <div
+          className="text-center space-y-4 rounded-3xl border p-6 backdrop-blur-md transition-colors"
+          style={{
+            backgroundColor: sdk.theme.tokens.bgCard,
+            borderColor: sdk.theme.tokens.borderDefault,
+          }}
+        >
           <div className="mx-auto w-48 h-48 rounded-2xl bg-white p-4 flex flex-col items-center justify-center shadow-lg">
             <QrCode className="w-36 h-36 text-slate-950" />
           </div>
           <div className="space-y-1">
-            <h4 className="text-sm font-bold text-white">Scan to Pay {user?.name || 'OmniUser'}</h4>
-            <p className="text-xs text-slate-400 font-mono">{user?.email || 'user@omnimini.dev'}</p>
+            <h4 className="text-sm font-bold" style={{ color: sdk.theme.tokens.textPrimary }}>
+              Scan to Pay {user?.name || 'OmniUser'}
+            </h4>
+            <p className="text-xs font-mono" style={{ color: sdk.theme.tokens.textSecondary }}>
+              {user?.email || 'user@omnimini.dev'}
+            </p>
           </div>
           <button
             onClick={() => {
               sdk.ui.showToast('Omni tag copied to clipboard', 'success');
               sdk.ui.hapticFeedback('light');
             }}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition border border-slate-700"
+            className="px-4 py-2 rounded-xl text-xs font-semibold transition border"
+            style={{
+              backgroundColor: sdk.theme.tokens.bgSurface,
+              borderColor: sdk.theme.tokens.borderDefault,
+              color: sdk.theme.tokens.textPrimary,
+            }}
           >
             Copy Payment Handle
           </button>
@@ -263,19 +316,44 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
       )}
 
       {activeTab === 'cards' && (
-        <div className="space-y-3 rounded-3xl bg-slate-900/90 border border-slate-800/80 p-5 backdrop-blur-md">
+        <div
+          className="space-y-3 rounded-3xl border p-5 backdrop-blur-md transition-colors"
+          style={{
+            backgroundColor: sdk.theme.tokens.bgCard,
+            borderColor: sdk.theme.tokens.borderDefault,
+          }}
+        >
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-indigo-400" />
+            <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: sdk.theme.tokens.textPrimary }}>
+              <Sliders className="w-4 h-4" style={{ color: sdk.theme.tokens.accentPrimary }} />
               Live Pluggable Settings
             </h3>
-            <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">Syncs with Super App</span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-full border font-mono"
+              style={{
+                backgroundColor: sdk.theme.tokens.accentMuted,
+                color: sdk.theme.tokens.accentPrimary,
+                borderColor: sdk.theme.tokens.borderAccent,
+              }}
+            >
+              Syncs with Super App
+            </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-between">
+          <div
+            className="p-3 rounded-xl border flex items-center justify-between"
+            style={{
+              backgroundColor: sdk.theme.tokens.bgSurface,
+              borderColor: sdk.theme.tokens.borderDefault,
+            }}
+          >
             <div>
-              <div className="text-xs font-semibold text-white">Require Biometrics</div>
-              <div className="text-[11px] text-slate-400">Face ID confirmation before send</div>
+              <div className="text-xs font-semibold" style={{ color: sdk.theme.tokens.textPrimary }}>
+                Require Biometrics
+              </div>
+              <div className="text-[11px]" style={{ color: sdk.theme.tokens.textSecondary }}>
+                Face ID confirmation before send
+              </div>
             </div>
             <input
               type="checkbox"
@@ -284,14 +362,28 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
                 sdk.settings.updateSetting('requireBiometrics', e.target.checked);
                 sdk.ui.hapticFeedback('light');
               }}
-              className="w-5 h-5 accent-blue-600 rounded"
+              style={{ accentColor: sdk.theme.tokens.accentPrimary }}
+              className="w-5 h-5 rounded cursor-pointer"
             />
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 space-y-2">
+          <div
+            className="p-3 rounded-xl border space-y-2"
+            style={{
+              backgroundColor: sdk.theme.tokens.bgSurface,
+              borderColor: sdk.theme.tokens.borderDefault,
+            }}
+          >
             <div className="flex justify-between text-xs">
-              <span className="font-semibold text-white">Daily Limit</span>
-              <span className="font-mono text-blue-400">{currencySymbol}{settings.dailySpendingLimit || 1500}</span>
+              <span className="font-semibold" style={{ color: sdk.theme.tokens.textPrimary }}>
+                Daily Limit
+              </span>
+              <span
+                className="font-mono font-bold"
+                style={{ color: sdk.theme.tokens.accentPrimary }}
+              >
+                {currencySymbol}{settings.dailySpendingLimit || 1500}
+              </span>
             </div>
             <input
               type="range"
@@ -302,14 +394,25 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
               onChange={(e) => {
                 sdk.settings.updateSetting('dailySpendingLimit', Number(e.target.value));
               }}
-              className="w-full accent-blue-600"
+              style={{ accentColor: sdk.theme.tokens.accentPrimary }}
+              className="w-full cursor-pointer"
             />
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-between">
+          <div
+            className="p-3 rounded-xl border flex items-center justify-between"
+            style={{
+              backgroundColor: sdk.theme.tokens.bgSurface,
+              borderColor: sdk.theme.tokens.borderDefault,
+            }}
+          >
             <div>
-              <div className="text-xs font-semibold text-white">Display Currency</div>
-              <div className="text-[11px] text-slate-400">Active base currency</div>
+              <div className="text-xs font-semibold" style={{ color: sdk.theme.tokens.textPrimary }}>
+                Display Currency
+              </div>
+              <div className="text-[11px]" style={{ color: sdk.theme.tokens.textSecondary }}>
+                Active base currency
+              </div>
             </div>
             <select
               value={settings.defaultCurrency || 'USD'}
@@ -317,7 +420,12 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
                 sdk.settings.updateSetting('defaultCurrency', e.target.value);
                 sdk.ui.hapticFeedback('light');
               }}
-              className="px-2.5 py-1 rounded-lg bg-slate-700 border border-slate-600 text-xs text-white"
+              className="px-2.5 py-1 rounded-lg border text-xs focus:outline-none"
+              style={{
+                backgroundColor: sdk.theme.tokens.bgInput,
+                borderColor: sdk.theme.tokens.borderDefault,
+                color: sdk.theme.tokens.textPrimary,
+              }}
             >
               <option value="USD">USD ($)</option>
               <option value="EUR">EUR (€)</option>

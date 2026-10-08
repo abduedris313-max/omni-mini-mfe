@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export const BottomNavBar: React.FC = () => {
-  const { currentTab, setCurrentTab, hapticFeedback } = useSuperApp();
+  const { currentTab, setCurrentTab, hapticFeedback, themeTokens } = useSuperApp();
 
   const tabs: Array<{
     id: NavigationTab;
@@ -27,7 +27,13 @@ export const BottomNavBar: React.FC = () => {
   return (
     <nav
       aria-label="Super App Bottom Navigation"
-      className="fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto h-16 border-t border-slate-800/80 bg-slate-950/85 backdrop-blur-xl px-2 flex items-center justify-around select-none"
+      className="fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto h-16 border-t px-2 flex items-center justify-around select-none transition-colors duration-200"
+      style={{
+        backgroundColor: themeTokens.bgGlass,
+        borderColor: themeTokens.borderDefault,
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+      }}
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
@@ -40,17 +46,32 @@ export const BottomNavBar: React.FC = () => {
               setCurrentTab(tab.id);
               hapticFeedback('light');
             }}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all duration-150 ios-active relative ${
-              isActive ? 'text-blue-400' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            className="flex flex-col items-center justify-center flex-1 py-1 transition-all duration-150 ios-active relative"
+            style={{
+              color: isActive ? themeTokens.accentPrimary : themeTokens.textMuted,
+            }}
           >
             <div className="relative">
-              <Icon className={`w-5 h-5 transition-transform duration-150 ${isActive ? 'scale-110' : ''}`} />
+              <Icon
+                className={`w-5 h-5 transition-transform duration-150 ${
+                  isActive ? 'scale-110' : ''
+                }`}
+              />
               {isActive && (
-                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span
+                  className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full animate-pulse"
+                  style={{
+                    backgroundColor: themeTokens.accentPrimary,
+                    boxShadow: `0 0 8px ${themeTokens.accentGlow}`,
+                  }}
+                />
               )}
             </div>
-            <span className={`text-[10px] mt-1 tracking-tight font-medium ${isActive ? 'font-bold' : ''}`}>
+            <span
+              className={`text-[10px] mt-1 tracking-tight ${
+                isActive ? 'font-bold' : 'font-medium'
+              }`}
+            >
               {tab.label}
             </span>
           </button>

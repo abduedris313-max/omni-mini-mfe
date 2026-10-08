@@ -6,6 +6,13 @@ import {
   NavigationTab,
 } from '../types/miniapp';
 import { repositoryService } from '../services/repositoryService';
+import {
+  resolveSuperAppTheme,
+  superAppTokensToCSSVariables,
+  resolveMiniAppTheme,
+  themeEventEmitter,
+} from '../theme/themeEngine';
+import { ThemeTokens } from '../theme/types';
 
 interface ToastItem {
   id: string;
@@ -33,6 +40,11 @@ interface SuperAppContextValue {
   updateSetting: <K extends keyof SuperAppSettings>(key: K, val: SuperAppSettings[K]) => void;
   updatePluggableSetting: (appId: string, settingKey: string, val: any) => void;
   getPluggableSetting: (appId: string, settingKey: string, fallback: any) => any;
+
+  // Theming Engine
+  themeTokens: ThemeTokens;
+  isDark: boolean;
+  superAppStyle: React.CSSProperties;
 
   currentTab: NavigationTab;
   setCurrentTab: (tab: NavigationTab) => void;
@@ -447,6 +459,44 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     setAvailableApps(apps);
   };
 
+  // Theming Engine resolution for Super App
+  const isDark =
+    settings.theme === 'dark' ||
+    (settings.theme === 'system' &&
+      (typeof window !== 'undefined'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : true));
+
+  const themeTokens = resolveSuperAppTheme(settings);
+  const superAppStyle = superAppTokensToCSSVariables(themeTokens) as React.CSSProperties;
+
+  // DOM sync for class, dataset, and CSS variables
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.classList.remove('dark', 'light');
+      root.classList.add(isDark ? 'dark' : 'light');
+      root.setAttribute('data-theme', settings.theme);
+      root.setAttribute('data-mode', isDark ? 'dark' : 'light');
+      root.setAttribute('data-accent', settings.accentColor);
+
+      const vars = superAppTokensToCSSVariables(themeTokens);
+      Object.entries(vars).forEach(([k, v]) => {
+        root.style.setProperty(k, v);
+      });
+    }
+
+    // Broadcast to mini app event listeners
+    availableApps.forEach((app) => {
+      try {
+        const miniTheme = resolveMiniAppTheme(app.id, settings);
+        themeEventEmitter.notify(miniTheme);
+      } catch {
+        // ignore
+      }
+    });
+  }, [settings, isDark, themeTokens, availableApps]);
+
   useEffect(() => {
     refreshApps();
   }, []);
@@ -462,6 +512,9 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         updateSetting,
         updatePluggableSetting,
         getPluggableSetting,
+        themeTokens,
+        isDark,
+        superAppStyle,
         currentTab,
         setCurrentTab,
         installedAppIds,

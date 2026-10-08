@@ -114,16 +114,25 @@ export const FoodBiteApp: React.FC<FoodBiteProps> = ({ sdk }) => {
   };
 
   return (
-    <div className="p-4 space-y-4 text-slate-100 pb-24">
+    <div
+      className="p-4 space-y-4 pb-24 transition-colors"
+      style={{ color: sdk.theme.tokens.textPrimary }}
+    >
       {/* Header Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-orange-500 to-amber-600 p-5 text-white shadow-lg shadow-orange-500/20">
+      <div
+        className="rounded-3xl p-5 text-white shadow-lg relative overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${sdk.theme.tokens.accentPrimary}, ${sdk.theme.isDark ? '#431407' : '#ea580c'})`,
+          boxShadow: `0 10px 25px ${sdk.theme.tokens.accentGlow}`,
+        }}
+      >
         <div className="flex justify-between items-start">
           <div>
             <span className="text-[10px] font-bold tracking-wider uppercase bg-white/20 px-2 py-0.5 rounded-full">
               Express 20-min
             </span>
             <h2 className="text-xl font-black mt-2">FoodBite Kitchens</h2>
-            <p className="text-xs text-orange-100 mt-0.5">Chef-crafted plates delivered to your doorstep</p>
+            <p className="text-xs opacity-90 mt-0.5">Chef-crafted plates delivered to your doorstep</p>
           </div>
           <div className="p-2 rounded-2xl bg-white/15 backdrop-blur-md">
             <Clock className="w-5 h-5 text-white" />
@@ -131,7 +140,7 @@ export const FoodBiteApp: React.FC<FoodBiteProps> = ({ sdk }) => {
         </div>
 
         {/* Dynamic Pluggable settings info badge */}
-        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-[11px] text-orange-100">
+        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-[11px] opacity-90">
           <div className="flex items-center gap-1">
             <Leaf className="w-3.5 h-3.5 text-emerald-300" />
             <span>{settings.ecoPackagingOnly ? 'Eco-friendly biodegradable pack' : 'Standard packaging'}</span>
@@ -143,19 +152,31 @@ export const FoodBiteApp: React.FC<FoodBiteProps> = ({ sdk }) => {
       </div>
 
       {orderComplete ? (
-        <div className="rounded-3xl bg-slate-900 border border-slate-800 p-8 text-center space-y-4">
+        <div
+          className="rounded-3xl border p-8 text-center space-y-4"
+          style={{
+            backgroundColor: sdk.theme.tokens.bgCard,
+            borderColor: sdk.theme.tokens.borderDefault,
+          }}
+        >
           <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
             <CheckCircle className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-white">Order Sent to Kitchen!</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="text-base font-bold" style={{ color: sdk.theme.tokens.textPrimary }}>
+              Order Sent to Kitchen!
+            </h3>
+            <p className="text-xs" style={{ color: sdk.theme.tokens.textSecondary }}>
               Courier will drop off at your door ({settings.contactlessDropoff ? 'Contactless drop' : 'Direct handoff'}).
             </p>
           </div>
           <button
             onClick={() => setOrderComplete(false)}
-            className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white transition"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-md"
+            style={{
+              backgroundColor: sdk.theme.tokens.accentPrimary,
+              color: sdk.theme.tokens.accentContrast,
+            }}
           >
             Order More Dishes
           </button>
@@ -165,9 +186,19 @@ export const FoodBiteApp: React.FC<FoodBiteProps> = ({ sdk }) => {
           {/* Menu Items */}
           <div className="space-y-3">
             <div className="flex justify-between items-center px-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Featured Menu</span>
+              <span
+                className="text-xs font-semibold uppercase tracking-wider"
+                style={{ color: sdk.theme.tokens.textSecondary }}
+              >
+                Featured Menu
+              </span>
               {settings.dietaryFilter && settings.dietaryFilter !== 'none' && (
-                <span className="text-[10px] text-amber-400 font-mono">Filtered by: {settings.dietaryFilter}</span>
+                <span
+                  className="text-[10px] font-mono font-bold"
+                  style={{ color: sdk.theme.tokens.accentPrimary }}
+                >
+                  Filtered by: {settings.dietaryFilter}
+                </span>
               )}
             </div>
 
@@ -176,38 +207,63 @@ export const FoodBiteApp: React.FC<FoodBiteProps> = ({ sdk }) => {
               return (
                 <div
                   key={item.id}
-                  className="rounded-2xl bg-slate-900/80 border border-slate-800 p-3.5 flex gap-3.5 items-center backdrop-blur-md"
+                  className="rounded-2xl border p-3.5 flex gap-3.5 items-center backdrop-blur-md transition-colors"
+                  style={{
+                    backgroundColor: sdk.theme.tokens.bgCard,
+                    borderColor: sdk.theme.tokens.borderDefault,
+                  }}
                 >
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-18 h-18 rounded-xl object-cover shrink-0 border border-slate-700/60"
+                    className="w-18 h-18 rounded-xl object-cover shrink-0 border"
+                    style={{ borderColor: sdk.theme.tokens.borderDefault }}
                   />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                    <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5 leading-snug">{item.description}</p>
+                    <h4 className="text-xs font-bold truncate" style={{ color: sdk.theme.tokens.textPrimary }}>
+                      {item.name}
+                    </h4>
+                    <p className="text-[11px] line-clamp-2 mt-0.5 leading-snug" style={{ color: sdk.theme.tokens.textSecondary }}>
+                      {item.description}
+                    </p>
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-sm font-extrabold text-orange-400">${item.price.toFixed(2)}</span>
+                      <span className="text-sm font-extrabold" style={{ color: sdk.theme.tokens.accentPrimary }}>
+                        ${item.price.toFixed(2)}
+                      </span>
                       {qty === 0 ? (
                         <button
                           onClick={() => updateQuantity(item.id, 1)}
-                          className="px-3 py-1 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white transition flex items-center gap-1 shadow-sm ios-active"
+                          className="px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm ios-active"
+                          style={{
+                            backgroundColor: sdk.theme.tokens.accentPrimary,
+                            color: sdk.theme.tokens.accentContrast,
+                          }}
                         >
                           <Plus className="w-3 h-3" />
                           <span>Add</span>
                         </button>
                       ) : (
-                        <div className="flex items-center gap-2 bg-slate-800 rounded-xl px-2 py-1 border border-slate-700">
+                        <div
+                          className="flex items-center gap-2 rounded-xl px-2 py-1 border"
+                          style={{
+                            backgroundColor: sdk.theme.tokens.bgSurface,
+                            borderColor: sdk.theme.tokens.borderDefault,
+                          }}
+                        >
                           <button
                             onClick={() => updateQuantity(item.id, -1)}
-                            className="p-0.5 text-slate-300 hover:text-white"
+                            className="p-0.5"
+                            style={{ color: sdk.theme.tokens.textSecondary }}
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="text-xs font-bold text-white font-mono">{qty}</span>
+                          <span className="text-xs font-bold font-mono" style={{ color: sdk.theme.tokens.textPrimary }}>
+                            {qty}
+                          </span>
                           <button
                             onClick={() => updateQuantity(item.id, 1)}
-                            className="p-0.5 text-slate-300 hover:text-white"
+                            className="p-0.5"
+                            style={{ color: sdk.theme.tokens.textSecondary }}
                           >
                             <Plus className="w-3 h-3" />
                           </button>
@@ -226,7 +282,12 @@ export const FoodBiteApp: React.FC<FoodBiteProps> = ({ sdk }) => {
               <button
                 onClick={handleCheckout}
                 disabled={isOrdering}
-                className="w-full p-4 rounded-2xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-xl shadow-orange-600/30 flex items-center justify-between transition ios-active"
+                className="w-full p-4 rounded-2xl font-bold text-sm shadow-xl flex items-center justify-between transition ios-active"
+                style={{
+                  backgroundColor: sdk.theme.tokens.accentPrimary,
+                  color: sdk.theme.tokens.accentContrast,
+                  boxShadow: `0 10px 25px ${sdk.theme.tokens.accentGlow}`,
+                }}
               >
                 <div className="flex items-center gap-2">
                   <ShoppingBag className="w-4 h-4" />

@@ -8,7 +8,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { user, setUser, signInWithGoogle, showToast, hapticFeedback } = useSuperApp();
+  const { user, setUser, signInWithGoogle, showToast, hapticFeedback, themeTokens, isDark } = useSuperApp();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('abdu.edris313@gmail.com');
   const [password, setPassword] = useState('••••••••••••');
@@ -63,10 +63,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 text-slate-100 shadow-2xl relative animate-in slide-in-from-bottom-6 duration-200">
+      <div
+        className="w-full max-w-sm rounded-3xl border p-6 shadow-2xl relative animate-in slide-in-from-bottom-6 duration-200"
+        style={{
+          backgroundColor: themeTokens.bgCard,
+          borderColor: themeTokens.borderDefault,
+          color: themeTokens.textPrimary,
+        }}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800/80 transition"
+          className="absolute top-4 right-4 p-2 rounded-full transition"
+          style={{
+            backgroundColor: themeTokens.bgSurface,
+            color: themeTokens.textSecondary,
+          }}
           aria-label="Close"
         >
           <X className="w-4 h-4" />
@@ -74,12 +85,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
         {/* Brand header */}
         <div className="text-center space-y-2 mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 mx-auto flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+          <div
+            className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg"
+            style={{
+              background: `linear-gradient(135deg, ${themeTokens.accentPrimary}, ${isDark ? '#312e81' : '#4338ca'})`,
+              boxShadow: `0 8px 24px ${themeTokens.accentGlow}`,
+            }}
+          >
             <Sparkles className="w-7 h-7" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-white">OmniMini Super Identity</h2>
-            <p className="text-xs text-slate-400">Single sign-on across all installed mini apps</p>
+            <h2 className="text-lg font-black" style={{ color: themeTokens.textPrimary }}>
+              OmniMini Super Identity
+            </h2>
+            <p className="text-xs" style={{ color: themeTokens.textSecondary }}>
+              Single sign-on across all installed mini apps
+            </p>
           </div>
         </div>
 
@@ -111,54 +132,75 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <span>Continue with Google</span>
         </button>
 
-        <div className="my-4 flex items-center gap-3 text-slate-500 text-[10px] uppercase font-bold tracking-widest">
-          <div className="h-px bg-slate-800 flex-1" />
+        <div className="my-4 flex items-center gap-3 text-[10px] uppercase font-bold tracking-widest" style={{ color: themeTokens.textMuted }}>
+          <div className="h-px flex-1" style={{ backgroundColor: themeTokens.borderDefault }} />
           <span>Or with Email</span>
-          <div className="h-px bg-slate-800 flex-1" />
+          <div className="h-px flex-1" style={{ backgroundColor: themeTokens.borderDefault }} />
         </div>
 
         {/* Email form */}
         <form onSubmit={handleEmailAuth} className="space-y-3">
           {mode === 'signup' && (
             <div>
-              <label className="text-[11px] font-semibold text-slate-400">Full Name</label>
+              <label className="text-[11px] font-semibold" style={{ color: themeTokens.textSecondary }}>
+                Full Name
+              </label>
               <div className="relative mt-1">
-                <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: themeTokens.textMuted }} />
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Your Name"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border text-xs focus:outline-none"
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="text-[11px] font-semibold text-slate-400">Email Address</label>
+            <label className="text-[11px] font-semibold" style={{ color: themeTokens.textSecondary }}>
+              Email Address
+            </label>
             <div className="relative mt-1">
-              <Mail className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Mail className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: themeTokens.textMuted }} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border text-xs focus:outline-none"
+                style={{
+                  backgroundColor: themeTokens.bgInput,
+                  borderColor: themeTokens.borderDefault,
+                  color: themeTokens.textPrimary,
+                }}
               />
             </div>
           </div>
 
           <div>
-            <label className="text-[11px] font-semibold text-slate-400">Password</label>
+            <label className="text-[11px] font-semibold" style={{ color: themeTokens.textSecondary }}>
+              Password
+            </label>
             <div className="relative mt-1">
-              <Lock className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Lock className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: themeTokens.textMuted }} />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border text-xs focus:outline-none"
+                style={{
+                  backgroundColor: themeTokens.bgInput,
+                  borderColor: themeTokens.borderDefault,
+                  color: themeTokens.textPrimary,
+                }}
               />
             </div>
           </div>
@@ -166,7 +208,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 ios-active"
+            className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg ios-active"
+            style={{
+              backgroundColor: themeTokens.accentPrimary,
+              color: themeTokens.accentContrast,
+              boxShadow: `0 8px 24px ${themeTokens.accentGlow}`,
+            }}
           >
             {isLoading ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -184,13 +231,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               setMode(mode === 'signin' ? 'signup' : 'signin');
               hapticFeedback('light');
             }}
-            className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
+            className="text-xs font-semibold"
+            style={{ color: themeTokens.accentPrimary }}
           >
             {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
           </button>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[10px] text-slate-500">
+        <div
+          className="mt-4 pt-3 border-t flex items-center justify-center gap-1.5 text-[10px]"
+          style={{
+            borderColor: themeTokens.borderDefault,
+            color: themeTokens.textMuted,
+          }}
+        >
           <ShieldCheck className="w-3 h-3 text-emerald-400" />
           <span>Biometric-backed encrypted Super App token</span>
         </div>

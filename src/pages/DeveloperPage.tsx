@@ -23,7 +23,14 @@ import {
 } from 'lucide-react';
 
 export const DeveloperPage: React.FC = () => {
-  const { availableApps, refreshApps, showToast, hapticFeedback } = useSuperApp();
+  const {
+    availableApps,
+    refreshApps,
+    showToast,
+    hapticFeedback,
+    themeTokens,
+    isDark,
+  } = useSuperApp();
   const [activeSection, setActiveSection] = useState<'console' | 'guide'>('console');
   const [telemetry, setTelemetry] = useState<any>(null);
 
@@ -143,25 +150,45 @@ export const DeveloperPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 space-y-5 text-slate-100 pb-28">
+    <div
+      className="p-4 space-y-5 pb-28 transition-colors duration-200"
+      style={{ color: themeTokens.textPrimary }}
+    >
       {/* Header */}
       <div className="space-y-1">
-        <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-widest">Developer Ecosystem</span>
-        <h1 className="text-2xl font-black text-white tracking-tight">Developer Portal</h1>
+        <span
+          className="text-[11px] font-bold uppercase tracking-widest"
+          style={{ color: themeTokens.accentPrimary }}
+        >
+          Developer Ecosystem
+        </span>
+        <h1
+          className="text-2xl font-black tracking-tight"
+          style={{ color: themeTokens.textPrimary }}
+        >
+          Developer Portal
+        </h1>
       </div>
 
       {/* Segmented Section Switcher */}
-      <div className="flex p-1 rounded-2xl bg-slate-900 border border-slate-800">
+      <div
+        className="flex p-1 rounded-2xl border"
+        style={{
+          backgroundColor: themeTokens.bgSurface,
+          borderColor: themeTokens.borderDefault,
+        }}
+      >
         <button
           onClick={() => {
             setActiveSection('console');
             hapticFeedback('light');
           }}
-          className={`flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeSection === 'console'
-              ? 'bg-blue-600 text-white shadow'
-              : 'text-slate-400 hover:text-white'
-          }`}
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+          style={{
+            backgroundColor: activeSection === 'console' ? themeTokens.accentPrimary : 'transparent',
+            color: activeSection === 'console' ? themeTokens.accentContrast : themeTokens.textSecondary,
+            boxShadow: activeSection === 'console' ? `0 2px 8px ${themeTokens.accentGlow}` : undefined,
+          }}
         >
           <LayoutDashboard className="w-3.5 h-3.5" />
           <span>Developer Console</span>
@@ -172,11 +199,12 @@ export const DeveloperPage: React.FC = () => {
             setActiveSection('guide');
             hapticFeedback('light');
           }}
-          className={`flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeSection === 'guide'
-              ? 'bg-blue-600 text-white shadow'
-              : 'text-slate-400 hover:text-white'
-          }`}
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+          style={{
+            backgroundColor: activeSection === 'guide' ? themeTokens.accentPrimary : 'transparent',
+            color: activeSection === 'guide' ? themeTokens.accentContrast : themeTokens.textSecondary,
+            boxShadow: activeSection === 'guide' ? `0 2px 8px ${themeTokens.accentGlow}` : undefined,
+          }}
         >
           <BookOpen className="w-3.5 h-3.5" />
           <span>Developer Guide</span>
@@ -188,32 +216,72 @@ export const DeveloperPage: React.FC = () => {
         <div className="space-y-5">
           {/* Telemetry Overview Cards */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800/80">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Total Installs</span>
-              <div className="text-xl font-extrabold text-white mt-1">
+            <div
+              className="p-4 rounded-3xl border"
+              style={{
+                backgroundColor: themeTokens.bgCard,
+                borderColor: themeTokens.borderDefault,
+              }}
+            >
+              <span
+                className="text-[10px] uppercase font-bold"
+                style={{ color: themeTokens.textSecondary }}
+              >
+                Total Installs
+              </span>
+              <div
+                className="text-xl font-extrabold mt-1"
+                style={{ color: themeTokens.textPrimary }}
+              >
                 {telemetry?.totalPlatformInstalls ? telemetry.totalPlatformInstalls.toLocaleString() : '68,420'}
               </div>
               <div className="text-[10px] text-emerald-400 mt-0.5">↑ 14% this month</div>
             </div>
 
-            <div className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800/80">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Crash-Free Rate</span>
+            <div
+              className="p-4 rounded-3xl border"
+              style={{
+                backgroundColor: themeTokens.bgCard,
+                borderColor: themeTokens.borderDefault,
+              }}
+            >
+              <span
+                className="text-[10px] uppercase font-bold"
+                style={{ color: themeTokens.textSecondary }}
+              >
+                Crash-Free Rate
+              </span>
               <div className="text-xl font-extrabold text-emerald-400 mt-1">
                 {telemetry?.crashFreeSessionRate ?? '99.95'}%
               </div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Sandboxed bridge runtime</div>
+              <div
+                className="text-[10px] mt-0.5"
+                style={{ color: themeTokens.textMuted }}
+              >
+                Sandboxed bridge runtime
+              </div>
             </div>
           </div>
 
           {/* Action to Publish New Mini App */}
           <div className="flex justify-between items-center px-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Published Mini Apps</span>
+            <span
+              className="text-xs font-bold uppercase tracking-wider"
+              style={{ color: themeTokens.textSecondary }}
+            >
+              Published Mini Apps
+            </span>
             <button
               onClick={() => {
                 setIsPublishingOpen(true);
                 hapticFeedback('medium');
               }}
-              className="px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/30 transition ios-active"
+              className="px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition ios-active"
+              style={{
+                backgroundColor: themeTokens.accentPrimary,
+                color: themeTokens.accentContrast,
+                boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
+              }}
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Publish Mini App</span>
@@ -225,7 +293,11 @@ export const DeveloperPage: React.FC = () => {
             {availableApps.map((app) => (
               <div
                 key={app.id}
-                className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between gap-3 backdrop-blur-md"
+                style={{
+                  backgroundColor: themeTokens.bgCard,
+                  borderColor: themeTokens.borderDefault,
+                }}
+                className="p-3.5 rounded-2xl border flex items-center justify-between gap-3 backdrop-blur-md transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
@@ -235,9 +307,17 @@ export const DeveloperPage: React.FC = () => {
                     {app.shortName.slice(0, 2)}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="text-xs font-bold text-white truncate">{app.name}</h4>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 font-mono">
-                      <span className="text-emerald-400">v{app.version}</span>
+                    <h4
+                      className="text-xs font-bold truncate"
+                      style={{ color: themeTokens.textPrimary }}
+                    >
+                      {app.name}
+                    </h4>
+                    <div
+                      className="flex items-center gap-2 text-[10px] mt-0.5 font-mono"
+                      style={{ color: themeTokens.textMuted }}
+                    >
+                      <span className="text-emerald-500 font-bold">v{app.version}</span>
                       <span>·</span>
                       <span className="capitalize">{app.status}</span>
                       <span>·</span>
@@ -248,7 +328,12 @@ export const DeveloperPage: React.FC = () => {
 
                 <button
                   onClick={() => handleBumpVersion(app.id)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 border border-slate-700 transition shrink-0 ios-active"
+                  style={{
+                    backgroundColor: themeTokens.bgSurface,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="px-3 py-1.5 rounded-xl border text-[11px] font-semibold transition shrink-0 ios-active hover:opacity-80"
                 >
                   Bump v+1
                 </button>
@@ -259,7 +344,14 @@ export const DeveloperPage: React.FC = () => {
           {/* Publish Wizard Modal Sheet */}
           {isPublishingOpen && (
             <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-              <div className="w-full max-w-md h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl bg-slate-900 border border-slate-800 flex flex-col overflow-hidden text-slate-100 shadow-2xl">
+              <div
+                style={{
+                  backgroundColor: themeTokens.bgCard,
+                  borderColor: themeTokens.borderDefault,
+                  color: themeTokens.textPrimary,
+                }}
+                className="w-full max-w-md h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl border flex flex-col overflow-hidden shadow-2xl"
+              >
                 <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2">
                     <UploadCloud className="w-4 h-4 text-blue-400" />
@@ -407,22 +499,27 @@ export const DeveloperPage: React.FC = () => {
               { id: 'settings', label: 'Pluggable Settings' },
               { id: 'auth', label: 'Shared Auth' },
               { id: 'publishing', label: 'Publishing Guide' },
-            ].map((topic) => (
-              <button
-                key={topic.id}
-                onClick={() => {
-                  setGuideTopic(topic.id as any);
-                  hapticFeedback('light');
-                }}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
-                  guideTopic === topic.id
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {topic.label}
-              </button>
-            ))}
+            ].map((topic) => {
+              const isSelected = guideTopic === topic.id;
+              return (
+                <button
+                  key={topic.id}
+                  onClick={() => {
+                    setGuideTopic(topic.id as any);
+                    hapticFeedback('light');
+                  }}
+                  style={{
+                    backgroundColor: isSelected ? themeTokens.accentPrimary : themeTokens.bgSurface,
+                    borderColor: isSelected ? 'transparent' : themeTokens.borderDefault,
+                    color: isSelected ? themeTokens.accentContrast : themeTokens.textSecondary,
+                    boxShadow: isSelected ? `0 2px 8px ${themeTokens.accentGlow}` : 'none',
+                  }}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition"
+                >
+                  {topic.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Theming Engine Guide Topic */}

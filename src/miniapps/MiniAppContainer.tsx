@@ -194,20 +194,44 @@ export const MiniAppContainer: React.FC = () => {
       {/* THEME ENGINE MODAL (Direct Mini App Theme Controller) */}
       {showThemeModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-5 space-y-4 text-slate-100 shadow-2xl animate-in slide-in-from-bottom-4 duration-150">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <div
+            className="w-full max-w-sm rounded-3xl border p-5 space-y-4 shadow-2xl animate-in slide-in-from-bottom-4 duration-150"
+            style={{
+              backgroundColor: sdk.theme.tokens.bgCard,
+              borderColor: sdk.theme.tokens.borderDefault,
+              color: sdk.theme.tokens.textPrimary,
+            }}
+          >
+            <div
+              className="flex items-center justify-between pb-2 border-b"
+              style={{ borderColor: sdk.theme.tokens.borderDefault }}
+            >
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400">
+                <div
+                  className="p-2 rounded-xl"
+                  style={{
+                    backgroundColor: sdk.theme.tokens.accentMuted,
+                    color: sdk.theme.tokens.accentPrimary,
+                  }}
+                >
                   <Palette className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-white">Mini App Theming Engine</h3>
-                  <p className="text-[10px] text-slate-400">Scoped styling bridge for {app.name}</p>
+                  <h3 className="text-xs font-bold" style={{ color: sdk.theme.tokens.textPrimary }}>
+                    Mini App Theming Engine
+                  </h3>
+                  <p className="text-[10px]" style={{ color: sdk.theme.tokens.textSecondary }}>
+                    Scoped styling bridge for {app.name}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowThemeModal(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-white bg-slate-800"
+                className="p-1.5 rounded-full"
+                style={{
+                  backgroundColor: sdk.theme.tokens.bgSurface,
+                  color: sdk.theme.tokens.textSecondary,
+                }}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -220,24 +244,35 @@ export const MiniAppContainer: React.FC = () => {
                 context.hapticFeedback('medium');
                 context.showToast('Mini app now inherits Super App theme dynamically', 'success');
               }}
-              className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                isInheritingTheme
-                  ? 'bg-blue-600/20 border-blue-500 shadow-sm'
-                  : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800/80'
-              }`}
+              className="p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between"
+              style={{
+                backgroundColor: isInheritingTheme ? sdk.theme.tokens.accentMuted : sdk.theme.tokens.bgSurface,
+                borderColor: isInheritingTheme ? sdk.theme.tokens.accentPrimary : sdk.theme.tokens.borderDefault,
+              }}
             >
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white">Inherit Super App Theme</span>
-                  <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-xs font-bold" style={{ color: sdk.theme.tokens.textPrimary }}>
+                    Inherit Super App Theme
+                  </span>
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded font-mono border"
+                    style={{
+                      backgroundColor: sdk.theme.tokens.accentMuted,
+                      color: sdk.theme.tokens.accentPrimary,
+                      borderColor: sdk.theme.tokens.borderAccent,
+                    }}
+                  >
                     Dynamic Sync
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-0.5">
+                <p className="text-[10px] mt-0.5" style={{ color: sdk.theme.tokens.textSecondary }}>
                   Follows host OLED dark/light mode & accent color automatically.
                 </p>
               </div>
-              {isInheritingTheme && <Check className="w-4 h-4 text-blue-400 shrink-0" />}
+              {isInheritingTheme && (
+                <Check className="w-4 h-4 shrink-0" style={{ color: sdk.theme.tokens.accentPrimary }} />
+              )}
             </div>
 
             {/* Inheritance Option 2: Pre-defined Custom Brand Themes */}
