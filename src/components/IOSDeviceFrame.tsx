@@ -46,41 +46,43 @@ export const IOSDeviceFrame: React.FC<IOSDeviceFrameProps> = ({ children }) => {
           className="w-full max-w-md min-h-screen flex flex-col relative shadow-2xl overflow-x-hidden transition-colors duration-200"
           style={{ backgroundColor: themeTokens.bgBase }}
         >
-          {/* iOS Top Status Bar */}
-          <div
-            className="h-10 px-5 flex items-center justify-between text-xs font-semibold select-none z-20 shrink-0 transition-colors"
-            style={{ color: themeTokens.textSecondary }}
-          >
-            <span className="font-mono text-xs">{time}</span>
-
-            {/* Dynamic Island Pill */}
+          {/* iOS Top Status Bar (Visibility controlled by settings.showStatusBar) */}
+          {settings.showStatusBar !== false && (
             <div
-              className="h-6 px-3 rounded-full border flex items-center gap-1.5 shadow-sm transition-colors"
-              style={{
-                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                borderColor: themeTokens.borderDefault,
-              }}
+              className="h-10 px-5 flex items-center justify-between text-xs font-semibold select-none z-20 shrink-0 transition-colors animate-in fade-in duration-200"
+              style={{ color: themeTokens.textSecondary }}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full animate-pulse"
-                style={{ backgroundColor: themeTokens.accentPrimary }}
-              />
-              <span
-                className="text-[10px] font-mono"
-                style={{ color: themeTokens.textSecondary }}
-              >
-                {activeApp ? activeApp.shortName : 'OmniMini'}
-              </span>
-            </div>
+              <span className="font-mono text-xs">{time}</span>
 
-            <div className="flex items-center gap-1.5">
-              <Wifi className="w-3.5 h-3.5" style={{ color: themeTokens.textSecondary }} />
-              <div className="flex items-center gap-0.5">
-                <span className="text-[10px] font-mono">98%</span>
-                <BatteryMedium className="w-4 h-4" style={{ color: themeTokens.textSecondary }} />
+              {/* Dynamic Island Pill */}
+              <div
+                className="h-6 px-3 rounded-full border flex items-center gap-1.5 shadow-sm transition-colors"
+                style={{
+                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                  borderColor: themeTokens.borderDefault,
+                }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full animate-pulse"
+                  style={{ backgroundColor: themeTokens.accentPrimary }}
+                />
+                <span
+                  className="text-[10px] font-mono"
+                  style={{ color: themeTokens.textSecondary }}
+                >
+                  {activeApp ? activeApp.shortName : 'OmniMini'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Wifi className="w-3.5 h-3.5" style={{ color: themeTokens.textSecondary }} />
+                <div className="flex items-center gap-0.5">
+                  <span className="text-[10px] font-mono">98%</span>
+                  <BatteryMedium className="w-4 h-4" style={{ color: themeTokens.textSecondary }} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Child pages */}
           <div className="flex-1 flex flex-col">{children}</div>
@@ -116,38 +118,43 @@ export const IOSDeviceFrame: React.FC<IOSDeviceFrameProps> = ({ children }) => {
           borderColor: isDark ? '#1e293b' : '#cbd5e1',
         }}
       >
-        {/* iOS Top Status Bar with Dynamic Island */}
-        <div
-          className="h-11 px-6 flex items-center justify-between text-xs font-semibold select-none z-30 shrink-0 pt-1 transition-colors"
-          style={{ color: themeTokens.textSecondary }}
-        >
-          <span className="font-mono text-xs">{time}</span>
-
-          {/* Dynamic Island */}
+        {/* iOS Top Status Bar with Dynamic Island (Visibility controlled by settings.showStatusBar) */}
+        {settings.showStatusBar !== false ? (
           <div
-            className="h-7 px-3.5 rounded-full border flex items-center gap-2 shadow-inner transition-colors"
-            style={{
-              backgroundColor: isDark ? '#000000' : 'rgba(0, 0, 0, 0.85)',
-              borderColor: themeTokens.borderDefault,
-            }}
+            className="h-11 px-6 flex items-center justify-between text-xs font-semibold select-none z-30 shrink-0 pt-1 transition-colors animate-in fade-in duration-200"
+            style={{ color: themeTokens.textSecondary }}
           >
-            <span
-              className="w-2 h-2 rounded-full animate-pulse"
-              style={{ backgroundColor: themeTokens.accentPrimary }}
-            />
-            <span className="text-[10px] text-slate-200 font-mono tracking-tight">
-              {activeApp ? activeApp.shortName : 'OmniMini'}
-            </span>
-          </div>
+            <span className="font-mono text-xs">{time}</span>
 
-          <div className="flex items-center gap-1.5">
-            <Wifi className="w-3.5 h-3.5" style={{ color: themeTokens.textSecondary }} />
-            <div className="flex items-center gap-0.5">
-              <span className="text-[10px] font-mono">98%</span>
-              <BatteryMedium className="w-4 h-4" style={{ color: themeTokens.textSecondary }} />
+            {/* Dynamic Island */}
+            <div
+              className="h-7 px-3.5 rounded-full border flex items-center gap-2 shadow-inner transition-colors"
+              style={{
+                backgroundColor: isDark ? '#000000' : 'rgba(0, 0, 0, 0.85)',
+                borderColor: themeTokens.borderDefault,
+              }}
+            >
+              <span
+                className="w-2 h-2 rounded-full animate-pulse"
+                style={{ backgroundColor: themeTokens.accentPrimary }}
+              />
+              <span className="text-[10px] text-slate-200 font-mono tracking-tight">
+                {activeApp ? activeApp.shortName : 'OmniMini'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Wifi className="w-3.5 h-3.5" style={{ color: themeTokens.textSecondary }} />
+              <div className="flex items-center gap-0.5">
+                <span className="text-[10px] font-mono">98%</span>
+                <BatteryMedium className="w-4 h-4" style={{ color: themeTokens.textSecondary }} />
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          /* Subtle clean top clearance when status bar is hidden in bezel mode */
+          <div className="h-4 shrink-0" />
+        )}
 
         {/* Scrollable Container */}
         <div className="flex-1 overflow-y-auto no-scrollbar relative flex flex-col">

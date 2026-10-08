@@ -25,6 +25,7 @@ import {
   Bell,
   CheckCircle2,
   Rocket,
+  PanelTop,
 } from 'lucide-react';
 
 export const SetupWizardModal: React.FC = () => {
@@ -46,6 +47,7 @@ export const SetupWizardModal: React.FC = () => {
   const [selectedTheme, setSelectedTheme] = useState<'dark' | 'light' | 'system'>(settings.theme || 'dark');
   const [selectedAccent, setSelectedAccent] = useState<'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet'>(settings.accentColor || 'blue');
   const [selectedBezel, setSelectedBezel] = useState<boolean>(settings.deviceBezel);
+  const [selectedShowStatusBar, setSelectedShowStatusBar] = useState<boolean>(settings.showStatusBar !== false);
   const [displayName, setDisplayName] = useState<string>(user?.name || 'Explorer User');
   const [selectedRole, setSelectedRole] = useState<'consumer' | 'developer' | 'admin'>(user?.role || 'consumer');
   const [starterBalance, setStarterBalance] = useState<number>(100);
@@ -116,6 +118,7 @@ export const SetupWizardModal: React.FC = () => {
       theme: selectedTheme,
       accentColor: selectedAccent,
       deviceBezel: selectedBezel,
+      showStatusBar: selectedShowStatusBar,
       displayName: displayName.trim() || user?.name || 'Explorer User',
       role: selectedRole,
       starterBalance: starterBalance,
@@ -130,6 +133,7 @@ export const SetupWizardModal: React.FC = () => {
       theme: settings.theme,
       accentColor: settings.accentColor,
       deviceBezel: settings.deviceBezel,
+      showStatusBar: true,
       starterBalance: 50,
       installedAppIds: ['paypulse-wallet', 'urbanride-transit', 'foodbite-express'],
       enablePermissions: true,
@@ -456,6 +460,54 @@ export const SetupWizardModal: React.FC = () => {
                   <div
                     className={`w-5 h-5 rounded-full bg-white transition-transform ${
                       selectedBezel ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Status Bar Visibility Toggle */}
+              <div
+                style={{
+                  backgroundColor: themeTokens.bgSurface,
+                  borderColor: themeTokens.borderDefault,
+                }}
+                className="p-3 rounded-2xl border flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="p-2 rounded-xl"
+                    style={{
+                      backgroundColor: themeTokens.accentMuted,
+                      color: currentAccentHex,
+                    }}
+                  >
+                    <PanelTop className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold" style={{ color: themeTokens.textPrimary }}>
+                      iOS Status Bar Visibility
+                    </div>
+                    <div className="text-[10px]" style={{ color: themeTokens.textSecondary }}>
+                      {selectedShowStatusBar ? 'Clock, Dynamic Island & battery visible' : 'Hidden for immersive fullscreen view'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedShowStatusBar(!selectedShowStatusBar);
+                    hapticFeedback('light');
+                  }}
+                  style={{
+                    backgroundColor: selectedShowStatusBar ? currentAccentHex : themeTokens.borderDefault,
+                  }}
+                  className="w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer"
+                  title="Toggle status bar visibility"
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform shadow-sm ${
+                      selectedShowStatusBar ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
                 </button>

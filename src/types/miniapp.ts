@@ -88,6 +88,7 @@ export interface SuperAppSettings {
   soundEffects: boolean;
   biometricAuth: boolean;
   deviceBezel: boolean;
+  showStatusBar: boolean;
   developerMode: boolean;
   pluggableAppSettings: Record<string, Record<string, any>>;
 }

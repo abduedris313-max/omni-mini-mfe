@@ -84,6 +84,7 @@ interface SuperAppContextValue {
     theme?: 'dark' | 'light' | 'system';
     accentColor?: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
     deviceBezel?: boolean;
+    showStatusBar?: boolean;
     displayName?: string;
     role?: 'consumer' | 'developer' | 'admin';
     starterBalance?: number;
@@ -101,6 +102,7 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
   soundEffects: true,
   biometricAuth: true,
   deviceBezel: false, // Default edge-to-edge with toggle to iPhone frame
+  showStatusBar: true,
   developerMode: true,
   pluggableAppSettings: {
     'paypulse-wallet': {
@@ -550,6 +552,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     theme?: 'dark' | 'light' | 'system';
     accentColor?: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
     deviceBezel?: boolean;
+    showStatusBar?: boolean;
     displayName?: string;
     role?: 'consumer' | 'developer' | 'admin';
     starterBalance?: number;
@@ -559,6 +562,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (data.theme) updateSetting('theme', data.theme);
     if (data.accentColor) updateSetting('accentColor', data.accentColor);
     if (data.deviceBezel !== undefined) updateSetting('deviceBezel', data.deviceBezel);
+    if (data.showStatusBar !== undefined) updateSetting('showStatusBar', data.showStatusBar);
 
     if (data.displayName || data.role) {
       setUserState((prev) => {
