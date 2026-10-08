@@ -243,15 +243,32 @@ apiRouter.get('/developer/analytics', (_req: Request, res: Response) => {
     data: {
       ...telemetry,
       totalMiniApps: miniAppsRegistry.length,
-      categoryDistribution: {
-        finance: miniAppsRegistry.filter((a) => a.category === 'finance').length,
-        transport: miniAppsRegistry.filter((a) => a.category === 'transport').length,
-        food: miniAppsRegistry.filter((a) => a.category === 'food').length,
-        health: miniAppsRegistry.filter((a) => a.category === 'health').length,
-        productivity: miniAppsRegistry.filter((a) => a.category === 'productivity').length,
-        utilities: miniAppsRegistry.filter((a) => a.category === 'utilities').length,
-        developer: miniAppsRegistry.filter((a) => a.category === 'developer').length,
-      },
+      categoryDistribution: miniAppsRegistry.reduce(
+        (acc, app) => {
+          const category = app.category;
+          if (
+            category === 'finance' ||
+            category === 'transport' ||
+            category === 'food' ||
+            category === 'health' ||
+            category === 'productivity' ||
+            category === 'utilities' ||
+            category === 'developer'
+          ) {
+            acc[category]++;
+          }
+          return acc;
+        },
+        {
+          finance: 0,
+          transport: 0,
+          food: 0,
+          health: 0,
+          productivity: 0,
+          utilities: 0,
+          developer: 0,
+        }
+      ),
     },
   });
 });
