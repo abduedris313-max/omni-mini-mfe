@@ -61,17 +61,20 @@ export const repositoryService = {
 
     // Local fallback
     let apps = getLocalApps();
-    if (category && category !== 'all') {
-      apps = apps.filter((a) => a.category === category);
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      apps = apps.filter(
-        (a) =>
+    const hasCategory = category && category !== 'all';
+    const hasSearch = !!search;
+
+    if (hasCategory || hasSearch) {
+      const q = search ? search.toLowerCase() : '';
+      apps = apps.filter((a) => {
+        if (hasCategory && a.category !== category) return false;
+        if (hasSearch && !(
           a.name.toLowerCase().includes(q) ||
           a.summary.toLowerCase().includes(q) ||
           a.author.name.toLowerCase().includes(q)
-      );
+        )) return false;
+        return true;
+      });
     }
     return apps;
   },
