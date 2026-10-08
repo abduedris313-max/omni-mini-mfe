@@ -21,10 +21,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setIsLoading(true);
     hapticFeedback('medium');
     try {
-      await signInWithGoogle({
+      // Create a mock token payload that the development backend can parse
+      const payload = {
         name: fullName || 'Abdu Edris',
         email: email || 'abdu.edris313@gmail.com',
-      });
+        picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80',
+      };
+      // Note: In a real app, this token would be provided securely by the Google Sign-In SDK
+      // Using btoa(unescape(encodeURIComponent())) to handle non-ASCII characters
+      const mockToken = `mock_token_for_dev_${btoa(unescape(encodeURIComponent(JSON.stringify(payload))))}`;
+      await signInWithGoogle(mockToken);
       onClose();
     } catch {
       showToast('Google sign-in failed', 'error');
