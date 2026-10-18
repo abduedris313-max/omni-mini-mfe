@@ -9,6 +9,7 @@ import {
   X,
   Sliders,
   Send,
+  ArrowUpDown,
 } from 'lucide-react';
 
 export const StorePage: React.FC = () => {
@@ -26,6 +27,7 @@ export const StorePage: React.FC = () => {
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'downloads' | 'rating' | 'recent'>('downloads');
   const [selectedApp, setSelectedApp] = useState<MiniAppManifest | null>(null);
   const [reviews, setReviews] = useState<MiniAppReview[]>([]);
   const [, setIsLoadingDetails] = useState(false);
@@ -46,15 +48,27 @@ export const StorePage: React.FC = () => {
     { id: 'developer', label: 'Developer' },
   ];
 
-  const filteredApps = availableApps.filter((app) => {
-    const matchesCategory = activeCategory === 'all' || app.category === activeCategory;
-    const matchesSearch =
-      !searchQuery ||
-      app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.author.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const filteredApps = availableApps
+    .filter((app) => {
+      const matchesCategory = activeCategory === 'all' || app.category === activeCategory;
+      const matchesSearch =
+        !searchQuery ||
+        app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.author.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'downloads') {
+        return (b.downloadCount || 0) - (a.downloadCount || 0);
+      } else if (sortBy === 'rating') {
+        return (b.rating || 0) - (a.rating || 0);
+      } else if (sortBy === 'recent') {
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      }
+      return 0;
+    });
 
   const handleInstallClick = async (appId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -131,24 +145,48 @@ export const StorePage: React.FC = () => {
         </h1>
       </div>
 
-      {/* Search Input */}
-      <div className="relative">
-        <Search
-          className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2"
-          style={{ color: themeTokens.textMuted }}
-        />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search mini apps, categories & creators..."
-          style={{
-            backgroundColor: themeTokens.bgInput,
-            borderColor: themeTokens.borderDefault,
-            color: themeTokens.textPrimary,
-          }}
-          className="w-full pl-10 pr-4 py-2.5 rounded-2xl border text-xs placeholder-slate-400 focus:outline-none transition"
-        />
+      {/* Search & Sort Controls */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search
+            className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2"
+            style={{ color: themeTokens.textMuted }}
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, category or summary..."
+            style={{
+              backgroundColor: themeTokens.bgInput,
+              borderColor: themeTokens.borderDefault,
+              color: themeTokens.textPrimary,
+            }}
+            className="w-full pl-10 pr-4 py-2.5 rounded-2xl border text-xs placeholder-slate-400 focus:outline-none transition"
+          />
+        </div>
+        <div className="relative shrink-0">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            <ArrowUpDown className="w-3.5 h-3.5" style={{ color: themeTokens.textMuted }} />
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value as any);
+              hapticFeedback('light');
+            }}
+            style={{
+              backgroundColor: themeTokens.bgInput,
+              borderColor: themeTokens.borderDefault,
+              color: themeTokens.textPrimary,
+            }}
+            className="pl-8 pr-3 py-2.5 rounded-2xl border text-xs font-semibold focus:outline-none transition appearance-none cursor-pointer"
+          >
+            <option value="downloads">Most Downloaded</option>
+            <option value="rating">Top Rated</option>
+            <option value="recent">Recently Added</option>
+          </select>
+        </div>
       </div>
 
       {/* Category Filter Horizontal Scroll */}
