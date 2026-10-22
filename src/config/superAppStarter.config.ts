@@ -66,6 +66,7 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
   },
   preinstalledMiniAppIds: [
     'miniapp-starter-template',
+    'ethiotax-salary',
     'fintrack-budget',
     'paypulse-wallet',
     'urbanride-transit',

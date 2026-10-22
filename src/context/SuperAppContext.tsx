@@ -107,6 +107,11 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
       enableDebugBanner: true,
       sampleCheckoutAmount: 5,
     },
+    'ethiotax-salary': {
+      pensionScheme: 'standard',
+      enableCostSharingDefault: false,
+      etbPerUsdRate: 122,
+    },
     'fintrack-budget': {
       monthlyBudgetLimit: 2500,
       alertThresholdPercent: 80,
