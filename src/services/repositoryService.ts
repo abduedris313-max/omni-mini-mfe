@@ -1,5 +1,7 @@
 import { INITIAL_MINI_APPS, INITIAL_REVIEWS } from '../data/seedMiniApps';
 import { MiniAppManifest, MiniAppReview, SuperAppUser } from '../types/miniapp';
+import { firestoreService } from './firestoreService';
+import { auth } from '../lib/firebase';
 
 const STORAGE_KEY_APPS = 'omnimini_apps_repo_v3';
 const STORAGE_KEY_REVIEWS = 'omnimini_reviews_repo_v3';
@@ -40,8 +42,27 @@ function saveLocalReviews(reviews: Record<string, MiniAppReview[]>) {
   }
 }
 
+function mergeApps(baseApps: MiniAppManifest[], firestoreApps: MiniAppManifest[]): MiniAppManifest[] {
+  const map = new Map<string, MiniAppManifest>();
+  for (const app of baseApps) {
+    map.set(app.id, app);
+  }
+  for (const fApp of firestoreApps) {
+    const existing = map.get(fApp.id);
+    map.set(fApp.id, existing ? { ...existing, ...fApp } : fApp);
+  }
+  return Array.from(map.values());
+}
+
 export const repositoryService = {
   async getMiniApps(category?: string, search?: string): Promise<MiniAppManifest[]> {
+    let firestoreApps: MiniAppManifest[] = [];
+    try {
+      firestoreApps = await firestoreService.getPublishedMiniApps();
+    } catch (e) {
+      console.warn('Firestore miniapps read fallback:', e);
+    }
+
     try {
       const params = new URLSearchParams();
       if (category && category !== 'all') params.append('category', category);
@@ -51,16 +72,17 @@ export const repositoryService = {
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          saveLocalApps(json.data);
-          return json.data;
+          const merged = mergeApps(json.data, firestoreApps);
+          saveLocalApps(merged);
+          return merged;
         }
       }
     } catch (e) {
       console.warn('Offline or API unreachable, serving cached repository', e);
     }
 
-    // Local fallback
-    let apps = getLocalApps();
+    // Local fallback merged with Firestore
+    let apps = mergeApps(getLocalApps(), firestoreApps);
     if (category && category !== 'all') {
       apps = apps.filter((a) => a.category === category);
     }
@@ -102,6 +124,7 @@ export const repositoryService = {
   },
 
   async publishMiniApp(payload: any): Promise<MiniAppManifest> {
+    let publishedManifest: MiniAppManifest | null = null;
     try {
       const res = await fetch('/api/miniapps/publish', {
         method: 'POST',
@@ -111,55 +134,71 @@ export const repositoryService = {
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          const apps = getLocalApps();
-          apps.unshift(json.data);
-          saveLocalApps(apps);
-          return json.data;
+          publishedManifest = json.data;
         }
       }
     } catch (e) {
       console.warn('Publish API unreachable, committing to local repository', e);
     }
 
-    // Client-side publish fallback
-    const id = payload.id || payload.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000);
-    const newApp: MiniAppManifest = {
-      id,
-      name: payload.name,
-      shortName: payload.shortName || payload.name.slice(0, 10),
-      version: payload.version || '1.0.0',
-      category: payload.category || 'utilities',
-      icon: payload.icon || 'Sparkles',
-      iconBg: payload.iconBg || '#3b82f6',
-      gradient: payload.gradient || 'from-blue-600 to-indigo-600',
-      summary: payload.summary,
-      description: payload.description || payload.summary,
-      author: {
-        name: payload.authorName || 'Verified Developer',
-        email: payload.authorEmail || 'dev@example.com',
-        verified: true,
-        org: payload.authorOrg || undefined,
-      },
-      rating: 5.0,
-      reviewCount: 0,
-      downloadCount: 0,
-      sizeKb: 64,
-      permissions: payload.permissions || ['storage'],
-      status: 'published',
-      pluggableSettingsSchema: payload.pluggableSettingsSchema || [],
-      entrypoint: payload.entrypoint || 'DynamicApp',
-      screenshots: payload.screenshots || [],
-      releaseNotes: payload.releaseNotes || 'Initial stable release to OmniMini Store.',
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
+    if (!publishedManifest) {
+      const id =
+        payload.id ||
+        payload.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000);
+      publishedManifest = {
+        id,
+        name: payload.name,
+        shortName: payload.shortName || payload.name.slice(0, 10),
+        version: payload.version || '1.0.0',
+        category: payload.category || 'utilities',
+        icon: payload.icon || 'Sparkles',
+        iconBg: payload.iconBg || '#3b82f6',
+        gradient: payload.gradient || 'from-blue-600 to-indigo-600',
+        summary: payload.summary,
+        description: payload.description || payload.summary,
+        author: {
+          name: payload.authorName || auth.currentUser?.displayName || 'Verified Developer',
+          email: payload.authorEmail || auth.currentUser?.email || '',
+          verified: true,
+          org: payload.authorOrg || undefined,
+        },
+        rating: 5.0,
+        reviewCount: 0,
+        downloadCount: 0,
+        sizeKb: 64,
+        permissions: payload.permissions || ['storage'],
+        status: 'published',
+        pluggableSettingsSchema: payload.pluggableSettingsSchema || [],
+        entrypoint: payload.entrypoint || 'DynamicApp',
+        screenshots: payload.screenshots || [],
+        releaseNotes: payload.releaseNotes || 'Initial stable release to OmniMini Store.',
+        updatedAt: new Date().toISOString().split('T')[0],
+      };
+    }
+
+    if (auth.currentUser && auth.currentUser.emailVerified) {
+      try {
+        await firestoreService.publishMiniAppToFirestore(publishedManifest);
+      } catch (e) {
+        console.warn('Failed to sync published Mini App to Firestore:', e);
+      }
+    }
 
     const apps = getLocalApps();
-    apps.unshift(newApp);
+    apps.unshift(publishedManifest);
     saveLocalApps(apps);
-    return newApp;
+    return publishedManifest;
   },
 
   async updateVersion(id: string, newVersion: string, releaseNotes: string, schema?: any): Promise<MiniAppManifest | null> {
+    if (auth.currentUser && auth.currentUser.emailVerified) {
+      try {
+        await firestoreService.updateMiniAppVersionInFirestore(id, newVersion, releaseNotes);
+      } catch (e) {
+        console.warn('Failed to sync Mini App version update to Firestore:', e);
+      }
+    }
+
     try {
       const res = await fetch(`/api/miniapps/${id}/version`, {
         method: 'PUT',

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
 import {
   SuperAppUser,
   SuperAppSettings,
@@ -6,6 +7,8 @@ import {
   NavigationTab,
 } from '../types/miniapp';
 import { repositoryService } from '../services/repositoryService';
+import { firestoreService } from '../services/firestoreService';
+import { auth, googleProvider } from '../lib/firebase';
 import {
   resolveSuperAppTheme,
   superAppTokensToCSSVariables,
@@ -174,15 +177,25 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const signInWithGoogle = async (customData?: Partial<SuperAppUser>) => {
-    const googleUser = await repositoryService.authenticateGoogle(customData);
-    setUser(googleUser);
-    showToast(`Welcome back, ${googleUser.name}! (Signed in via Google)`, 'success');
+  const signInWithGoogle = async (_customData?: Partial<SuperAppUser>) => {
+    const credential = await signInWithPopup(auth, googleProvider);
+    const synced = await firestoreService.ensureUserProfile(
+      credential.user,
+      SUPER_APP_STARTER_CONFIG.preinstalledMiniAppIds
+    );
+    setUser(synced.user);
+    setWalletBalance(synced.walletBalance);
+    setInstalledAppIds(synced.installedAppIds);
+    setRecentAppIds(synced.recentAppIds);
+    showToast(`Welcome back, ${synced.user.name}! (Signed in via Google)`, 'success');
     hapticFeedback('success');
   };
 
   const signOut = () => {
+    firebaseSignOut(auth).catch((e) => console.warn('Firebase signOut error:', e));
     setUser(null);
+    setWalletBalance(0);
+    setTransactions([]);
     showToast('Signed out of OmniMini Super App', 'info');
     hapticFeedback('light');
   };
@@ -243,9 +256,14 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const installApp = async (appId: string) => {
     if (!installedAppIds.includes(appId)) {
-      const next = [...installedAppIds, appId];
+      const next = [...installedAppIds, appId].slice(-10);
       setInstalledAppIds(next);
       localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(next));
+      if (auth.currentUser) {
+        firestoreService.updateUserAppLists(auth.currentUser.uid, next, recentAppIds).catch((e) =>
+          console.warn('Firestore installApp sync failed:', e)
+        );
+      }
       showToast('Mini app installed to your home screen', 'success');
       hapticFeedback('success');
     }
@@ -255,6 +273,11 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     const next = installedAppIds.filter((id) => id !== appId);
     setInstalledAppIds(next);
     localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(next));
+    if (auth.currentUser) {
+      firestoreService.updateUserAppLists(auth.currentUser.uid, next, recentAppIds).catch((e) =>
+        console.warn('Firestore uninstallApp sync failed:', e)
+      );
+    }
     if (activeMiniAppId === appId) {
       setActiveMiniAppId(null);
     }
@@ -277,6 +300,11 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   const clearRecentApps = () => {
     setRecentAppIds([]);
     localStorage.setItem('omnimini_recent_apps_v3', JSON.stringify([]));
+    if (auth.currentUser) {
+      firestoreService.updateUserAppLists(auth.currentUser.uid, installedAppIds, []).catch((e) =>
+        console.warn('Firestore clearRecentApps sync failed:', e)
+      );
+    }
     showToast('Recent launch history cleared', 'info');
     hapticFeedback('light');
   };
@@ -284,8 +312,13 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   const openMiniApp = (appId: string) => {
     setActiveMiniAppId(appId);
     setRecentAppIds((prev) => {
-      const next = [appId, ...prev.filter((id) => id !== appId)].slice(0, 12);
+      const next = [appId, ...prev.filter((id) => id !== appId)].slice(0, 10);
       localStorage.setItem('omnimini_recent_apps_v3', JSON.stringify(next));
+      if (auth.currentUser) {
+        firestoreService.updateUserAppLists(auth.currentUser.uid, installedAppIds, next).catch((e) =>
+          console.warn('Firestore openMiniApp sync failed:', e)
+        );
+      }
       return next;
     });
     hapticFeedback('light');
@@ -352,6 +385,20 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       return next;
     });
 
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      firestoreService.updateWalletBalance(uid, newBal).catch((e) =>
+        console.warn('Firestore balance update failed:', e)
+      );
+      firestoreService
+        .recordTransaction({
+          ...newTx,
+          userId: uid,
+          status: 'completed',
+        })
+        .catch((e) => console.warn('Firestore transaction record failed:', e));
+    }
+
     showToast(`-$${amount.toFixed(2)} charged to Super App Wallet`, 'info');
     hapticFeedback('medium');
     return true;
@@ -382,6 +429,20 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
       return next;
     });
+
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      firestoreService.updateWalletBalance(uid, newBal).catch((e) =>
+        console.warn('Firestore balance update failed:', e)
+      );
+      firestoreService
+        .recordTransaction({
+          ...newTx,
+          userId: uid,
+          status: 'completed',
+        })
+        .catch((e) => console.warn('Firestore transaction record failed:', e));
+    }
 
     showToast(`+$${amount.toFixed(2)} added to Wallet`, 'success');
     hapticFeedback('success');
@@ -651,10 +712,66 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       console.warn('Failed saving setup flag', e);
     }
 
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      firestoreService
+        .updateFullUserOnboarding(uid, {
+          name: data.displayName?.trim() || user?.name || auth.currentUser.displayName || 'User',
+          avatar: user?.avatar || auth.currentUser.photoURL || '',
+          role: data.role === 'developer' ? 'developer' : 'consumer',
+          walletBalance: (walletBalance || 0) + (data.starterBalance || 0),
+          installedAppIds:
+            data.installedAppIds && data.installedAppIds.length > 0
+              ? data.installedAppIds
+              : installedAppIds,
+          recentAppIds,
+        })
+        .catch((e) => console.warn('Firestore onboarding sync failed:', e));
+    }
+
     setIsSetupWizardOpen(false);
     showToast('🎉 Welcome to OmniMini! Personalization saved.', 'success');
     hapticFeedback('success');
   };
+
+  // Listen to Firebase Auth state changes and attach Firestore listeners only when authenticated
+  useEffect(() => {
+    let unsubscribeTx: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubscribeTx) {
+        unsubscribeTx();
+        unsubscribeTx = null;
+      }
+
+      if (!firebaseUser) {
+        return;
+      }
+
+      try {
+        const synced = await firestoreService.ensureUserProfile(
+          firebaseUser,
+          SUPER_APP_STARTER_CONFIG.preinstalledMiniAppIds
+        );
+        setUser(synced.user);
+        setWalletBalance(synced.walletBalance);
+        setInstalledAppIds(synced.installedAppIds);
+        setRecentAppIds(synced.recentAppIds);
+
+        unsubscribeTx = firestoreService.subscribeUserTransactions(firebaseUser.uid, (txs) => {
+          setTransactions(txs);
+          localStorage.setItem('omnimini_transactions_v3', JSON.stringify(txs));
+        });
+      } catch (e) {
+        console.warn('Error hydrating Firebase user session:', e);
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeTx) unsubscribeTx();
+    };
+  }, []);
 
   useEffect(() => {
     refreshApps();

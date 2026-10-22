@@ -1,0 +1,371 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'abdu.edris313@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBoundedStringList(arr) {
+      return arr is list &&
+        arr.size() <= 10 &&
+        (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= 128));
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid',
+          'name',
+          'avatar',
+          'role',
+          'walletBalance',
+          'installedAppIds',
+          'recentAppIds',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'name',
+          'avatar',
+          'role',
+          'walletBalance',
+          'installedAppIds',
+          'recentAppIds',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.avatar is string && data.avatar.size() >= 0 && data.avatar.size() <= 500 &&
+        data.role is string && data.role.size() <= 20 && (data.role == 'consumer' || data.role == 'developer') &&
+        data.walletBalance is number && data.walletBalance >= 0 && data.walletBalance <= 1000000 &&
+        isBoundedStringList(data.installedAppIds) &&
+        isBoundedStringList(data.recentAppIds) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWalletTransaction(data) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'appId',
+          'appName',
+          'amount',
+          'type',
+          'description',
+          'status',
+          'timestamp',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'userId',
+          'appId',
+          'appName',
+          'amount',
+          'type',
+          'description',
+          'status',
+          'timestamp',
+          'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.userId == request.auth.uid &&
+        isValidId(data.appId) &&
+        data.appName is string && data.appName.size() >= 1 && data.appName.size() <= 80 &&
+        data.amount is number && data.amount > 0 && data.amount <= 1000000 &&
+        data.type is string && data.type.size() <= 10 && (data.type == 'debit' || data.type == 'credit') &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 200 &&
+        data.status is string && data.status.size() <= 16 && data.status == 'completed' &&
+        data.timestamp is string && data.timestamp.size() >= 1 && data.timestamp.size() <= 64 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMiniAppCatalogItem(data) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'name',
+          'shortName',
+          'version',
+          'category',
+          'icon',
+          'iconBg',
+          'gradient',
+          'summary',
+          'description',
+          'authorName',
+          'rating',
+          'reviewCount',
+          'downloadCount',
+          'sizeKb',
+          'permissions',
+          'status',
+          'entrypoint',
+          'releaseNotes',
+          'updatedAt',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'name',
+          'shortName',
+          'version',
+          'category',
+          'icon',
+          'iconBg',
+          'gradient',
+          'summary',
+          'description',
+          'authorName',
+          'rating',
+          'reviewCount',
+          'downloadCount',
+          'sizeKb',
+          'permissions',
+          'status',
+          'entrypoint',
+          'releaseNotes',
+          'updatedAt',
+          'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.shortName is string && data.shortName.size() >= 1 && data.shortName.size() <= 24 &&
+        data.version is string && data.version.size() >= 1 && data.version.size() <= 24 &&
+        data.category is string && data.category.size() <= 24 && (
+          data.category == 'finance' ||
+          data.category == 'transport' ||
+          data.category == 'food' ||
+          data.category == 'health' ||
+          data.category == 'productivity' ||
+          data.category == 'utilities' ||
+          data.category == 'developer'
+        ) &&
+        data.icon is string && data.icon.size() >= 1 && data.icon.size() <= 40 &&
+        data.iconBg is string && data.iconBg.size() >= 1 && data.iconBg.size() <= 24 &&
+        data.gradient is string && data.gradient.size() >= 1 && data.gradient.size() <= 80 &&
+        data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 160 &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 1000 &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+        data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+        data.reviewCount is int && data.reviewCount >= 0 && data.reviewCount <= 10000000 &&
+        data.downloadCount is int && data.downloadCount >= 0 && data.downloadCount <= 100000000 &&
+        data.sizeKb is number && data.sizeKb >= 1 && data.sizeKb <= 102400 &&
+        isBoundedStringList(data.permissions) &&
+        data.status is string && data.status.size() <= 16 && (data.status == 'published' || data.status == 'archived') &&
+        data.entrypoint is string && data.entrypoint.size() >= 1 && data.entrypoint.size() <= 64 &&
+        data.releaseNotes is string && data.releaseNotes.size() >= 1 && data.releaseNotes.size() <= 500 &&
+        data.updatedAt is timestamp &&
+        data.createdAt is timestamp;
+    }
+
+    // 4. Collection Rules
+
+    // Public-safe UserProfile (No PII stored here)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            (
+              // Action 1: Update profile identity / preferences
+              incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'role', 'updatedAt']) ||
+              // Action 2: Update wallet balance
+              incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'updatedAt']) ||
+              // Action 3: Update installed or recent Mini Apps
+              incoming().diff(existing()).affectedKeys().hasOnly(['installedAppIds', 'recentAppIds', 'updatedAt']) ||
+              // Action 4: Full onboarding wizard sync
+              incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'role', 'walletBalance', 'installedAppIds', 'recentAppIds', 'updatedAt'])
+            )
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(userId) && isAdmin();
+
+      // Split Collection for PII Isolation: /users/{userId}/private/{docId}
+      match /private/{docId} {
+        allow get: if isSignedIn() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          (isOwner(userId) || isAdmin()) &&
+          exists(/databases/$(database)/documents/users/$(userId));
+
+        allow list: if false;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'info' &&
+          isOwner(userId) &&
+          isValidUserPrivateInfo(incoming()) &&
+          incoming().uid == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          (
+            exists(/databases/$(database)/documents/users/$(userId)) ||
+            existsAfter(/databases/$(database)/documents/users/$(userId))
+          );
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'info' &&
+          isValidUserPrivateInfo(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid &&
+          (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isVerifiedUser() && isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+
+      // Subcollection: /users/{userId}/transactions/{transactionId}
+      match /transactions/{transactionId} {
+        allow get: if isSignedIn() &&
+          isValidId(userId) &&
+          isValidId(transactionId) &&
+          (isOwner(userId) || isAdmin()) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == userId;
+
+        allow list: if isSignedIn() &&
+          resource.data.userId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(transactionId) &&
+          isOwner(userId) &&
+          isValidWalletTransaction(incoming()) &&
+          incoming().id == transactionId &&
+          incoming().userId == userId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+
+        // Terminal State Lock: Completed wallet ledger entries are strictly immutable
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // Developer Mini Apps Registry: /miniapps/{appId}
+    match /miniapps/{appId} {
+      allow get: if isValidId(appId) && (
+        resource.data.status == 'published' ||
+        (isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin()))
+      );
+
+      allow list: if resource.data.status == 'published';
+
+      allow create: if isVerifiedUser() &&
+        isValidId(appId) &&
+        isValidMiniAppCatalogItem(incoming()) &&
+        incoming().id == appId &&
+        incoming().status == 'published' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if isVerifiedUser() &&
+        isValidId(appId) &&
+        isValidMiniAppCatalogItem(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().ownerId == request.auth.uid &&
+            existing().status != 'archived' &&
+            (
+              // Action 1: Release new version & release notes
+              incoming().diff(existing()).affectedKeys().hasOnly(['version', 'releaseNotes', 'updatedAt']) ||
+              // Action 2: Update metadata or archive app
+              incoming().diff(existing()).affectedKeys().hasOnly(['name', 'shortName', 'summary', 'description', 'status', 'updatedAt'])
+            )
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(appId) && isAdmin();
+    }
+  }
+}

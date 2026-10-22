@@ -1,0 +1,354 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Publicly safe user profile and Super App state without raw PII.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Optional avatar URL.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "role": {
+          "type": "string",
+          "description": "Role within the Super App.",
+          "enum": ["consumer", "developer"]
+        },
+        "walletBalance": {
+          "type": "number",
+          "description": "Current shared Super App wallet balance."
+        },
+        "installedAppIds": {
+          "type": "array",
+          "description": "Bounded list of installed mini app IDs (max 10)."
+        },
+        "recentAppIds": {
+          "type": "array",
+          "description": "Bounded list of recently launched mini app IDs (max 10)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "name",
+        "avatar",
+        "role",
+        "walletBalance",
+        "installedAppIds",
+        "recentAppIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII document storing the user's private email address.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified email address of the user.",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Immutable ledger record for a user's Super App wallet transaction.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Transaction identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "appId": {
+          "type": "string",
+          "description": "Target mini app or system identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "appName": {
+          "type": "string",
+          "description": "Human-readable mini app name.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "amount": {
+          "type": "number",
+          "description": "Positive transaction amount in USD."
+        },
+        "type": {
+          "type": "string",
+          "description": "Transaction direction.",
+          "enum": ["debit", "credit"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Summary description of the transaction.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "description": "Terminal status of the ledger entry.",
+          "enum": ["completed"]
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Formatted display timestamp.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when transaction was recorded."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "appId",
+        "appName",
+        "amount",
+        "type",
+        "description",
+        "status",
+        "timestamp",
+        "createdAt"
+      ]
+    },
+    "MiniAppCatalogItem": {
+      "title": "MiniAppCatalogItem",
+      "description": "Published Mini App manifest entry in the Super App registry.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique Mini App ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the developer who published the mini app.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the Mini App.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "shortName": {
+          "type": "string",
+          "description": "Short label for home screen icon.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version string.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "category": {
+          "type": "string",
+          "description": "Mini App category.",
+          "enum": [
+            "finance",
+            "transport",
+            "food",
+            "health",
+            "productivity",
+            "utilities",
+            "developer"
+          ]
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "iconBg": {
+          "type": "string",
+          "description": "Hex background color for icon.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "gradient": {
+          "type": "string",
+          "description": "Tailwind gradient classes.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "summary": {
+          "type": "string",
+          "description": "Short summary of the Mini App.",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "description": {
+          "type": "string",
+          "description": "Full description of the Mini App.",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Developer display name.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "rating": {
+          "type": "number",
+          "description": "Average rating (1 to 5)."
+        },
+        "reviewCount": {
+          "type": "number",
+          "description": "Total number of user reviews."
+        },
+        "downloadCount": {
+          "type": "number",
+          "description": "Total number of installs."
+        },
+        "sizeKb": {
+          "type": "number",
+          "description": "Bundle size in KB."
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Bounded list of requested host permissions (max 10)."
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle status of the Mini App.",
+          "enum": ["published", "archived"]
+        },
+        "entrypoint": {
+          "type": "string",
+          "description": "Component entrypoint identifier.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "releaseNotes": {
+          "type": "string",
+          "description": "Release notes for the current version.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "name",
+        "shortName",
+        "version",
+        "category",
+        "icon",
+        "iconBg",
+        "gradient",
+        "summary",
+        "description",
+        "authorName",
+        "rating",
+        "reviewCount",
+        "downloadCount",
+        "sizeKb",
+        "permissions",
+        "status",
+        "entrypoint",
+        "releaseNotes",
+        "updatedAt",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores a user's Super App profile, wallet balance, and bounded installed/recent app lists."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated subcollection for storing user PII (email address) restricted strictly to the owner or admin."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/WalletTransaction" },
+      "description": "Subcollection of immutable wallet ledger transactions belonging to the parent user."
+    },
+    "/miniapps/{appId}": {
+      "schema": { "$ref": "#/entities/MiniAppCatalogItem" },
+      "description": "Collection of developer-published Mini Apps in the OmniMini Store."
+    }
+  }
+}
