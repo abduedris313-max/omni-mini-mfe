@@ -3,6 +3,7 @@ import { useSuperApp } from '../context/SuperAppContext';
 import { THEME_PRESETS } from '../theme/presets';
 import { ThemePresetId } from '../theme/types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
+import { useServiceWorker } from '../hooks/useServiceWorker';
 import {
   Palette,
   Moon,
@@ -18,6 +19,11 @@ import {
   Sparkles,
   PanelTop,
   User as UserIcon,
+  Wifi,
+  WifiOff,
+  HardDriveDownload,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -40,7 +46,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     themeTokens,
     isDark,
     openSetupWizard,
+    isOnline,
+    pendingSyncCount,
+    syncOfflineQueue,
   } = useSuperApp();
+
+  const {
+    swActive,
+    offlineReady,
+    cachedAssetCount,
+    storageUsedKb,
+    lastVerifiedAt,
+    isPrewarming,
+    prewarmOfflineCache,
+  } = useServiceWorker();
 
   const [expandedAppId, setExpandedAppId] = useState<string | null>('paypulse-wallet');
 
@@ -838,7 +857,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
         </div>
       </div>
 
-      {/* PWA & System Status Section */}
+      {/* PWA & Offline Runtime Section */}
       <div className="space-y-2">
         <span
           className="text-xs font-bold uppercase tracking-wider px-1"
@@ -848,25 +867,135 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
         </span>
 
         <div
-          className="rounded-3xl border p-4 space-y-3 backdrop-blur-md"
+          className="rounded-3xl border p-4 space-y-3.5 backdrop-blur-md"
           style={{
             backgroundColor: themeTokens.bgCard,
             borderColor: themeTokens.borderDefault,
           }}
         >
           <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {isOnline ? (
+                <Wifi className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-amber-400" />
+              )}
+              <span
+                className="text-xs font-semibold"
+                style={{ color: themeTokens.textPrimary }}
+              >
+                {isOnline ? 'Online — Cloud & Offline Vault Synced' : 'Offline Mode — Running from Local Vault'}
+              </span>
+            </div>
             <span
-              className="text-xs font-semibold"
-              style={{ color: themeTokens.textPrimary }}
+              className={`text-[10px] px-2 py-0.5 rounded-full border font-mono font-bold ${
+                swActive || offlineReady
+                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+              }`}
             >
-              Progressive Web App Compliance
-            </span>
-            <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-mono font-bold">
-              Active SW
+              {swActive || offlineReady ? 'Offline Ready' : 'SW Active'}
             </span>
           </div>
 
-          <div className="pt-2">
+          {/* Offline Cache Telemetry Grid */}
+          <div className="grid grid-cols-3 gap-2">
+            <div
+              className="p-2.5 rounded-2xl border text-center"
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+              }}
+            >
+              <div className="text-[10px] font-medium" style={{ color: themeTokens.textSecondary }}>
+                Cached Assets
+              </div>
+              <div className="text-sm font-black font-mono mt-0.5" style={{ color: themeTokens.textPrimary }}>
+                {cachedAssetCount > 0 ? cachedAssetCount : 'All Core'}
+              </div>
+            </div>
+
+            <div
+              className="p-2.5 rounded-2xl border text-center"
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+              }}
+            >
+              <div className="text-[10px] font-medium" style={{ color: themeTokens.textSecondary }}>
+                Offline Storage
+              </div>
+              <div className="text-sm font-black font-mono mt-0.5" style={{ color: themeTokens.textPrimary }}>
+                {storageUsedKb > 0 ? `${storageUsedKb} KB` : 'IndexedDB'}
+              </div>
+            </div>
+
+            <div
+              className="p-2.5 rounded-2xl border text-center"
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+              }}
+            >
+              <div className="text-[10px] font-medium" style={{ color: themeTokens.textSecondary }}>
+                Sync Queue
+              </div>
+              <div
+                className={`text-sm font-black font-mono mt-0.5 ${
+                  pendingSyncCount > 0 ? 'text-amber-400' : 'text-emerald-400'
+                }`}
+              >
+                {pendingSyncCount > 0 ? `${pendingSyncCount} Pending` : '0 Queued'}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] px-1" style={{ color: themeTokens.textSecondary }}>
+            <span className="flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+              <span>Firestore IndexedDB + Workbox Cache</span>
+            </span>
+            {lastVerifiedAt && <span>Verified {lastVerifiedAt}</span>}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={async () => {
+                hapticFeedback('light');
+                await prewarmOfflineCache();
+                showToast('All Mini Apps & core assets cached for offline use', 'success');
+              }}
+              disabled={isPrewarming}
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderAccent,
+                color: themeTokens.accentPrimary,
+              }}
+              className="flex-1 py-2.5 px-3 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 ios-active disabled:opacity-50"
+            >
+              <HardDriveDownload className="w-3.5 h-3.5" />
+              <span>{isPrewarming ? 'Caching Offline Bundle...' : 'Verify & Pre-cache Offline Bundle'}</span>
+            </button>
+
+            {pendingSyncCount > 0 && isOnline && (
+              <button
+                onClick={() => {
+                  hapticFeedback('medium');
+                  syncOfflineQueue();
+                }}
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                }}
+                className="py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 ios-active"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Sync Now ({pendingSyncCount})</span>
+              </button>
+            )}
+          </div>
+
+          <div className="pt-1">
             <PWAInstallButton variant="card" />
           </div>
 
@@ -876,7 +1005,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
               backgroundColor: themeTokens.bgSurface,
               borderColor: themeTokens.borderDefault,
             }}
-            className="w-full mt-2 py-2.5 rounded-xl border hover:opacity-80 text-xs font-semibold text-rose-500 transition flex items-center justify-center gap-1.5"
+            className="w-full mt-1 py-2.5 rounded-xl border hover:opacity-80 text-xs font-semibold text-rose-500 transition flex items-center justify-center gap-1.5"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Clear App Cache & Reload</span>

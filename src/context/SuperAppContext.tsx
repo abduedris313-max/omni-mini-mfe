@@ -8,6 +8,8 @@ import {
 } from '../types/miniapp';
 import { repositoryService } from '../services/repositoryService';
 import { firestoreService } from '../services/firestoreService';
+import { offlineSyncService } from '../services/offlineSyncService';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { auth, googleProvider } from '../lib/firebase';
 import {
   resolveSuperAppTheme,
@@ -81,6 +83,11 @@ interface SuperAppContextValue {
   // Global repository cache
   availableApps: MiniAppManifest[];
   refreshApps: () => Promise<void>;
+
+  // Offline PWA & Sync state
+  isOnline: boolean;
+  pendingSyncCount: number;
+  syncOfflineQueue: () => Promise<void>;
 
   // First-Time User Setup Wizard
   isSetupWizardOpen: boolean;
@@ -157,6 +164,11 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
 };
 
 export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const isOnline = useOnlineStatus();
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(() =>
+    offlineSyncService.getPendingCount()
+  );
+
   // 1. User Authentication (clean unauthenticated initial state unless signed in)
   const [user, setUserState] = useState<SuperAppUser | null>(() => {
     try {
@@ -254,15 +266,35 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     return SUPER_APP_STARTER_CONFIG.preinstalledMiniAppIds;
   });
 
+  const syncUserListsWithOfflineFallback = (uid: string, installed: string[], recent: string[]) => {
+    if (!navigator.onLine) {
+      offlineSyncService.enqueue({
+        type: 'user_app_lists',
+        uid,
+        installedAppIds: installed,
+        recentAppIds: recent,
+      });
+      setPendingSyncCount(offlineSyncService.getPendingCount());
+      return;
+    }
+    firestoreService.updateUserAppLists(uid, installed, recent).catch(() => {
+      offlineSyncService.enqueue({
+        type: 'user_app_lists',
+        uid,
+        installedAppIds: installed,
+        recentAppIds: recent,
+      });
+      setPendingSyncCount(offlineSyncService.getPendingCount());
+    });
+  };
+
   const installApp = async (appId: string) => {
     if (!installedAppIds.includes(appId)) {
       const next = [...installedAppIds, appId].slice(-10);
       setInstalledAppIds(next);
       localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(next));
       if (auth.currentUser) {
-        firestoreService.updateUserAppLists(auth.currentUser.uid, next, recentAppIds).catch((e) =>
-          console.warn('Firestore installApp sync failed:', e)
-        );
+        syncUserListsWithOfflineFallback(auth.currentUser.uid, next, recentAppIds);
       }
       showToast('Mini app installed to your home screen', 'success');
       hapticFeedback('success');
@@ -274,9 +306,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     setInstalledAppIds(next);
     localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(next));
     if (auth.currentUser) {
-      firestoreService.updateUserAppLists(auth.currentUser.uid, next, recentAppIds).catch((e) =>
-        console.warn('Firestore uninstallApp sync failed:', e)
-      );
+      syncUserListsWithOfflineFallback(auth.currentUser.uid, next, recentAppIds);
     }
     if (activeMiniAppId === appId) {
       setActiveMiniAppId(null);
@@ -301,9 +331,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     setRecentAppIds([]);
     localStorage.setItem('omnimini_recent_apps_v3', JSON.stringify([]));
     if (auth.currentUser) {
-      firestoreService.updateUserAppLists(auth.currentUser.uid, installedAppIds, []).catch((e) =>
-        console.warn('Firestore clearRecentApps sync failed:', e)
-      );
+      syncUserListsWithOfflineFallback(auth.currentUser.uid, installedAppIds, []);
     }
     showToast('Recent launch history cleared', 'info');
     hapticFeedback('light');
@@ -315,9 +343,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       const next = [appId, ...prev.filter((id) => id !== appId)].slice(0, 10);
       localStorage.setItem('omnimini_recent_apps_v3', JSON.stringify(next));
       if (auth.currentUser) {
-        firestoreService.updateUserAppLists(auth.currentUser.uid, installedAppIds, next).catch((e) =>
-          console.warn('Firestore openMiniApp sync failed:', e)
-        );
+        syncUserListsWithOfflineFallback(auth.currentUser.uid, installedAppIds, next);
       }
       return next;
     });
@@ -387,16 +413,25 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     if (auth.currentUser) {
       const uid = auth.currentUser.uid;
-      firestoreService.updateWalletBalance(uid, newBal).catch((e) =>
-        console.warn('Firestore balance update failed:', e)
-      );
-      firestoreService
-        .recordTransaction({
-          ...newTx,
-          userId: uid,
-          status: 'completed',
-        })
-        .catch((e) => console.warn('Firestore transaction record failed:', e));
+      const txPayload = {
+        ...newTx,
+        userId: uid,
+        status: 'completed' as const,
+      };
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: newBal });
+        offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, newBal).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: newBal });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService.recordTransaction(txPayload).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+      }
     }
 
     showToast(`-$${amount.toFixed(2)} charged to Super App Wallet`, 'info');
@@ -432,16 +467,25 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     if (auth.currentUser) {
       const uid = auth.currentUser.uid;
-      firestoreService.updateWalletBalance(uid, newBal).catch((e) =>
-        console.warn('Firestore balance update failed:', e)
-      );
-      firestoreService
-        .recordTransaction({
-          ...newTx,
-          userId: uid,
-          status: 'completed',
-        })
-        .catch((e) => console.warn('Firestore transaction record failed:', e));
+      const txPayload = {
+        ...newTx,
+        userId: uid,
+        status: 'completed' as const,
+      };
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: newBal });
+        offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, newBal).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: newBal });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService.recordTransaction(txPayload).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+      }
     }
 
     showToast(`+$${amount.toFixed(2)} added to Wallet`, 'success');
@@ -773,6 +817,20 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, []);
 
+  const syncOfflineQueue = async () => {
+    const { synced, remaining } = await offlineSyncService.flushQueue();
+    setPendingSyncCount(remaining);
+    if (synced > 0) {
+      showToast(`Synced ${synced} offline ${synced === 1 ? 'action' : 'actions'} to cloud`, 'success');
+    }
+  };
+
+  useEffect(() => {
+    if (isOnline && offlineSyncService.getPendingCount() > 0) {
+      syncOfflineQueue();
+    }
+  }, [isOnline]);
+
   useEffect(() => {
     refreshApps();
   }, []);
@@ -815,6 +873,9 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         hapticFeedback,
         availableApps,
         refreshApps,
+        isOnline,
+        pendingSyncCount,
+        syncOfflineQueue,
         isSetupWizardOpen,
         openSetupWizard,
         closeSetupWizard,
