@@ -104,8 +104,8 @@ function suppressViteHmrPlugin(): Plugin {
   };
 }
 
-export default defineConfig(() => {
-  const basePath = process.env.GITHUB_PAGES_BASE || '/';
+export default defineConfig(({ command }) => {
+  const basePath = process.env.GITHUB_PAGES_BASE || (command === 'build' ? './' : '/');
 
   return {
     base: basePath,
