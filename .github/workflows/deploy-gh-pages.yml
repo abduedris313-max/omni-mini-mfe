@@ -33,7 +33,7 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Type-check codebase
         run: npm run lint
