@@ -105,7 +105,10 @@ function suppressViteHmrPlugin(): Plugin {
 }
 
 export default defineConfig(() => {
+  const basePath = process.env.GITHUB_PAGES_BASE || '/';
+
   return {
+    base: basePath,
     plugins: [
       suppressViteHmrPlugin(),
       react(),
@@ -114,30 +117,30 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/',
+          id: basePath,
           name: 'OmniMini Super App',
           short_name: 'OmniMini',
           description: 'Micro Frontend Super App platform with pluggable mini apps and developer store.',
           theme_color: '#0f172a',
           background_color: '#090d16',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: basePath,
+          scope: basePath,
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: 'pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
@@ -155,7 +158,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {
