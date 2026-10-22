@@ -108,10 +108,10 @@ export const EthioTaxApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [activeTab, setActiveTab] = useState<'calculator' | 'brackets' | 'saved'>('calculator');
   const [calcMode, setCalcMode] = useState<'gross_to_net' | 'net_to_gross'>('gross_to_net');
 
-  // Calculator Inputs (ETB)
-  const [basicSalaryInput, setBasicSalaryInput] = useState<string>('25000');
-  const [targetNetInput, setTargetNetInput] = useState<string>('18000');
-  const [transportAllowanceInput, setTransportAllowanceInput] = useState<string>('2200');
+  // Calculator Inputs (ETB) — clean zero defaults
+  const [basicSalaryInput, setBasicSalaryInput] = useState<string>('0');
+  const [targetNetInput, setTargetNetInput] = useState<string>('0');
+  const [transportAllowanceInput, setTransportAllowanceInput] = useState<string>('0');
   const [transportExemptCap, setTransportExemptCap] = useState<number>(2200);
   const [housingAllowanceInput, setHousingAllowanceInput] = useState<string>('0');
   const [overtimeAndBonusInput, setOvertimeAndBonusInput] = useState<string>('0');

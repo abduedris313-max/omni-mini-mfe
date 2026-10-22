@@ -22,7 +22,7 @@ export const WalletPage: React.FC = () => {
   } = useSuperApp();
 
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState('50.00');
+  const [topUpAmount, setTopUpAmount] = useState('');
 
   const handleTopUpConfirm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,58 +111,79 @@ export const WalletPage: React.FC = () => {
         </div>
 
         <div className="space-y-2">
-          {transactions.map((tx) => (
+          {transactions.length === 0 ? (
             <div
-              key={tx.id}
               style={{
                 backgroundColor: themeTokens.bgCard,
                 borderColor: themeTokens.borderDefault,
               }}
-              className="p-3.5 rounded-2xl border flex items-center justify-between gap-3 backdrop-blur-md transition-colors"
+              className="p-6 rounded-2xl border text-center space-y-1.5 backdrop-blur-md"
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`p-2.5 rounded-xl ${
-                    tx.type === 'credit'
-                      ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
-                      : 'bg-rose-500/20 text-rose-500 border border-rose-500/30'
-                  }`}
-                >
-                  {tx.type === 'credit' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                </div>
-
-                <div>
-                  <h4
-                    className="text-xs font-bold"
-                    style={{ color: themeTokens.textPrimary }}
-                  >
-                    {tx.appName}
-                  </h4>
-                  <p
-                    className="text-[11px] line-clamp-1"
-                    style={{ color: themeTokens.textSecondary }}
-                  >
-                    {tx.description}
-                  </p>
-                  <span
-                    className="text-[10px]"
-                    style={{ color: themeTokens.textMuted }}
-                  >
-                    {tx.timestamp}
-                  </span>
-                </div>
-              </div>
-
-              <div
-                className={`text-xs font-mono font-bold ${
-                  tx.type === 'credit' ? 'text-emerald-500' : ''
-                }`}
-                style={tx.type !== 'credit' ? { color: themeTokens.textPrimary } : undefined}
-              >
-                {tx.type === 'credit' ? '+' : '-'}${tx.amount.toFixed(2)}
-              </div>
+              <Wallet
+                className="w-6 h-6 mx-auto opacity-50"
+                style={{ color: themeTokens.textMuted }}
+              />
+              <p className="text-xs font-bold" style={{ color: themeTokens.textPrimary }}>
+                No Transactions Recorded Yet
+              </p>
+              <p className="text-[11px]" style={{ color: themeTokens.textSecondary }}>
+                Top up your unified balance or complete a checkout inside any mini app to view activity here.
+              </p>
             </div>
-          ))}
+          ) : (
+            transactions.map((tx) => (
+              <div
+                key={tx.id}
+                style={{
+                  backgroundColor: themeTokens.bgCard,
+                  borderColor: themeTokens.borderDefault,
+                }}
+                className="p-3.5 rounded-2xl border flex items-center justify-between gap-3 backdrop-blur-md transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2.5 rounded-xl ${
+                      tx.type === 'credit'
+                        ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-500 border border-rose-500/30'
+                    }`}
+                  >
+                    {tx.type === 'credit' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                  </div>
+
+                  <div>
+                    <h4
+                      className="text-xs font-bold"
+                      style={{ color: themeTokens.textPrimary }}
+                    >
+                      {tx.appName}
+                    </h4>
+                    <p
+                      className="text-[11px] line-clamp-1"
+                      style={{ color: themeTokens.textSecondary }}
+                    >
+                      {tx.description}
+                    </p>
+                    <span
+                      className="text-[10px]"
+                      style={{ color: themeTokens.textMuted }}
+                    >
+                      {tx.timestamp}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className={`text-xs font-mono font-bold ${
+                    tx.type === 'credit' ? 'text-emerald-500' : ''
+                  }`}
+                  style={tx.type !== 'credit' ? { color: themeTokens.textPrimary } : undefined}
+                >
+                  {tx.type === 'credit' ? '+' : '-'}${tx.amount.toFixed(2)}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

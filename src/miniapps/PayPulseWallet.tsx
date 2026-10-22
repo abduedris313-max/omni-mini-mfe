@@ -21,8 +21,8 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
   const settings = sdk.settings.getSettings();
   const balance = sdk.payment.getBalance();
 
-  const [sendAmount, setSendAmount] = useState('25.00');
-  const [recipient, setRecipient] = useState('elena.rostova@omnimini.dev');
+  const [sendAmount, setSendAmount] = useState('');
+  const [recipient, setRecipient] = useState('');
   const [showQR, setShowQR] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<'send' | 'receive' | 'cards'>('send');
@@ -30,6 +30,10 @@ export const PayPulseApp: React.FC<PayPulseProps> = ({ sdk }) => {
   const currencySymbol = settings.defaultCurrency === 'EUR' ? '€' : settings.defaultCurrency === 'GBP' ? '£' : '$';
 
   const handleSend = async () => {
+    if (!recipient.trim()) {
+      sdk.ui.showToast('Please enter a recipient email or Omni tag', 'warning');
+      return;
+    }
     const amt = parseFloat(sendAmount);
     if (isNaN(amt) || amt <= 0) {
       sdk.ui.showToast('Please enter a valid amount', 'warning');

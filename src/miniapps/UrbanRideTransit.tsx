@@ -18,11 +18,11 @@ interface UrbanRideProps {
 
 export const UrbanRideApp: React.FC<UrbanRideProps> = ({ sdk }) => {
   const settings = sdk.settings.getSettings();
-  const [pickup, setPickup] = useState('742 Evergreen Terrace');
-  const [destination, setDestination] = useState('Civic Center Plaza, Metro 4');
+  const [pickup, setPickup] = useState('');
+  const [destination, setDestination] = useState('');
   const [selectedTier, setSelectedTier] = useState<string>(settings.preferredVehicleClass || 'comfort_ev');
   const [rideState, setRideState] = useState<'idle' | 'searching' | 'matched' | 'completed'>('idle');
-  const [etaMinutes, setEtaMinutes] = useState(3);
+  const [etaMinutes] = useState(3);
 
   // Sync preference if settings change
   useEffect(() => {
@@ -63,21 +63,26 @@ export const UrbanRideApp: React.FC<UrbanRideProps> = ({ sdk }) => {
   const fareWithTip = Number((currentTierObj.basePrice * (1 + tipPercent / 100)).toFixed(2));
 
   const handleRequestRide = async () => {
+    if (!pickup.trim() || !destination.trim()) {
+      sdk.ui.showToast('Please enter both pickup and destination addresses', 'warning');
+      return;
+    }
+
     sdk.ui.hapticFeedback('medium');
     setRideState('searching');
 
     setTimeout(async () => {
       // Deduct from shared Super App wallet
-      const payment = await sdk.payment.pay(fareWithTip, `UrbanRide: ${currentTierObj.name} to ${destination}`);
+      const payment = await sdk.payment.pay(fareWithTip, `UrbanRide: ${currentTierObj.name} to ${destination.trim()}`);
       if (payment.success) {
         setRideState('matched');
-        sdk.ui.showToast(`Driver assigned! Fare $${fareWithTip.toFixed(2)} paid via Super App Wallet`, 'success');
+        sdk.ui.showToast(`Ride confirmed! Fare $${fareWithTip.toFixed(2)} paid via Super App Wallet`, 'success');
         sdk.ui.hapticFeedback('success');
       } else {
         setRideState('idle');
         sdk.ui.showToast('Unable to book ride: ' + (payment.error || 'Check wallet balance'), 'error');
       }
-    }, 1200);
+    }, 800);
   };
 
   return (
@@ -212,40 +217,41 @@ export const UrbanRideApp: React.FC<UrbanRideProps> = ({ sdk }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
               <CheckCircle2 className="w-4 h-4" />
-              <span>Driver Arriving in {etaMinutes} mins</span>
+              <span>Dispatch Confirmed · ETA {etaMinutes} mins</span>
             </div>
-            <span className="text-xs font-mono text-slate-400">Tesla Model Y · #7XYZ88</span>
+            <span className="text-xs font-mono text-slate-400">{currentTierObj.name}</span>
           </div>
 
-          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/50">
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80"
-              alt="Driver"
-              className="w-12 h-12 rounded-full object-cover border-2 border-emerald-500/40"
-            />
-            <div className="flex-1">
-              <h4 className="text-sm font-bold text-white">Mateo Cruz</h4>
-              <div className="flex items-center gap-1 text-xs text-amber-400">
-                <Star className="w-3 h-3 fill-current" />
-                <span>4.98 (1,430 trips)</span>
-              </div>
+          <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/50 space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-slate-400">Pickup</span>
+              <span className="font-semibold text-white truncate max-w-[200px]">{pickup}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Destination</span>
+              <span className="font-semibold text-white truncate max-w-[200px]">{destination}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Fare Settled</span>
+              <span className="font-mono font-bold text-emerald-400">${fareWithTip.toFixed(2)}</span>
             </div>
           </div>
 
           <div className="text-xs text-slate-400 space-y-1">
             <div>Quiet mode preference: <span className="text-emerald-300 font-semibold">{settings.quietRideMode ? 'Enabled' : 'Disabled'}</span></div>
-            <div>Safety Contact: <span className="text-slate-300 font-mono">{settings.emergencyContactPhone || 'Configured'}</span></div>
+            <div>Emergency Contact: <span className="text-slate-300 font-mono">{settings.emergencyContactPhone || 'Not set'}</span></div>
           </div>
 
           <button
             onClick={() => {
               setRideState('idle');
-              sdk.ui.showToast('Ride completed. Thank you for riding clean!', 'success');
+              setDestination('');
+              sdk.ui.showToast('Trip completed.', 'success');
               sdk.ui.hapticFeedback('success');
             }}
             className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition border border-slate-700"
           >
-            End Trip Simulation
+            Complete Trip
           </button>
         </div>
       )}

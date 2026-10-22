@@ -17,6 +17,7 @@ import {
   Check,
   Sparkles,
   PanelTop,
+  User as UserIcon,
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -109,19 +110,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
         }}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <img
-            src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
-            alt="Avatar"
-            className="w-12 h-12 rounded-full object-cover shrink-0 border-2"
-            style={{ borderColor: themeTokens.accentPrimary }}
-          />
+          {user?.avatar ? (
+            <img
+              src={user.avatar}
+              alt="Avatar"
+              className="w-12 h-12 rounded-full object-cover shrink-0 border-2"
+              style={{ borderColor: themeTokens.accentPrimary }}
+            />
+          ) : (
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 border-2 text-sm font-black"
+              style={{
+                backgroundColor: themeTokens.accentMuted,
+                borderColor: themeTokens.accentPrimary,
+                color: themeTokens.accentPrimary,
+              }}
+            >
+              {user?.name ? user.name.slice(0, 2).toUpperCase() : <UserIcon className="w-5 h-5" />}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h3
                 className="text-sm font-bold truncate"
                 style={{ color: themeTokens.textPrimary }}
               >
-                {user?.name || 'Guest User'}
+                {user?.name || 'Not Signed In'}
               </h3>
               {user?.isGoogle && (
                 <span

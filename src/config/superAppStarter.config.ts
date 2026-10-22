@@ -60,7 +60,7 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
   wallet: {
     currency: 'USD',
     currencySymbol: '$',
-    starterBalance: 345.5,
+    starterBalance: 0,
     minTopUp: 10,
     maxTopUp: 2500,
   },

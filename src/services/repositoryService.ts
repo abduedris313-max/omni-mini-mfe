@@ -1,8 +1,8 @@
 import { INITIAL_MINI_APPS, INITIAL_REVIEWS } from '../data/seedMiniApps';
 import { MiniAppManifest, MiniAppReview, SuperAppUser } from '../types/miniapp';
 
-const STORAGE_KEY_APPS = 'omnimini_apps_repo_v2';
-const STORAGE_KEY_REVIEWS = 'omnimini_reviews_repo_v2';
+const STORAGE_KEY_APPS = 'omnimini_apps_repo_v3';
+const STORAGE_KEY_REVIEWS = 'omnimini_reviews_repo_v3';
 
 function getLocalApps(): MiniAppManifest[] {
   try {
@@ -141,16 +141,14 @@ export const repositoryService = {
         org: payload.authorOrg || undefined,
       },
       rating: 5.0,
-      reviewCount: 1,
-      downloadCount: 1,
-      sizeKb: 110,
+      reviewCount: 0,
+      downloadCount: 0,
+      sizeKb: 64,
       permissions: payload.permissions || ['storage'],
       status: 'published',
       pluggableSettingsSchema: payload.pluggableSettingsSchema || [],
       entrypoint: payload.entrypoint || 'DynamicApp',
-      screenshots: payload.screenshots || [
-        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80',
-      ],
+      screenshots: payload.screenshots || [],
       releaseNotes: payload.releaseNotes || 'Initial stable release to OmniMini Store.',
       updatedAt: new Date().toISOString().split('T')[0],
     };
@@ -250,12 +248,12 @@ export const repositoryService = {
     }
 
     const apps = getLocalApps();
+    const totalInstalls = apps.reduce((sum, a) => sum + (a.downloadCount || 0), 0);
+    const uniqueDevelopers = new Set(apps.map((a) => a.author.email)).size;
     return {
-      totalPlatformInstalls: 68420,
-      dailyActiveUsers: 25110,
-      averageLoadTimeMs: 138,
-      crashFreeSessionRate: 99.95,
-      developerCount: 142,
+      totalPlatformInstalls: totalInstalls,
+      crashFreeSessionRate: 100.0,
+      developerCount: uniqueDevelopers,
       totalMiniApps: apps.length,
       categoryDistribution: {
         finance: apps.filter((a) => a.category === 'finance').length,
@@ -284,17 +282,18 @@ export const repositoryService = {
       console.warn('Google Auth API unreachable, generating local session', e);
     }
 
+    const email = (googleData?.email || '').trim();
+    const name = (googleData?.name || (email ? email.split('@')[0] : 'Authenticated User')).trim();
+
     return {
       id: `usr-google-${Date.now()}`,
-      name: googleData?.name || 'Alex Chen (Google Account)',
-      email: googleData?.email || 'alex.chen@gmail.com',
-      avatar:
-        googleData?.avatar ||
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+      name,
+      email: email || 'authenticated@omnimini.app',
+      avatar: googleData?.avatar || '',
       isGoogle: true,
-      walletBalance: 320.0,
-      role: 'developer',
-      joinedDate: 'October 2026',
+      walletBalance: 0,
+      role: googleData?.role || 'developer',
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
     };
   },
 };

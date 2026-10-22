@@ -9,14 +9,18 @@ apiRouter.use(express.json());
 let miniAppsRegistry: MiniAppManifest[] = [...INITIAL_MINI_APPS];
 let miniAppReviews: Record<string, MiniAppReview[]> = { ...INITIAL_REVIEWS };
 
-// Telemetry & analytics metrics
-const telemetry = {
-  totalPlatformInstalls: 66800,
-  dailyActiveUsers: 24350,
-  averageLoadTimeMs: 142,
-  crashFreeSessionRate: 99.94,
-  developerCount: 128,
-};
+// Dynamic telemetry helper
+function computeTelemetry() {
+  const totalInstalls = miniAppsRegistry.reduce((sum, app) => sum + (app.downloadCount || 0), 0);
+  const totalReviews = Object.values(miniAppReviews).reduce((sum, list) => sum + list.length, 0);
+  const uniqueAuthors = new Set(miniAppsRegistry.map((a) => a.author.email)).size;
+  return {
+    totalPlatformInstalls: totalInstalls,
+    totalReviews,
+    crashFreeSessionRate: 100.0,
+    developerCount: uniqueAuthors,
+  };
+}
 
 // GET /api/health
 apiRouter.get('/health', (_req: Request, res: Response) => {
@@ -138,33 +142,20 @@ apiRouter.post('/miniapps/publish', (req: Request, res: Response) => {
       org: authorOrg || undefined,
     },
     rating: 5.0,
-    reviewCount: 1,
-    downloadCount: 1,
-    sizeKb: Math.floor(Math.random() * 80) + 80,
+    reviewCount: 0,
+    downloadCount: 0,
+    sizeKb: payloadSizeKb(req.body),
     permissions: permissions || ['storage'],
     status: 'published',
     pluggableSettingsSchema: pluggableSettingsSchema || [],
     entrypoint: entrypoint || 'DynamicApp',
-    screenshots: screenshots || [
-      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80',
-    ],
+    screenshots: screenshots || [],
     releaseNotes: releaseNotes || 'Initial stable release to OmniMini Store.',
     updatedAt: new Date().toISOString().split('T')[0],
   };
 
   miniAppsRegistry.unshift(newApp);
-  miniAppReviews[generatedId] = [
-    {
-      id: `rev-${Date.now()}`,
-      appId: generatedId,
-      userName: 'Verified Auditor',
-      rating: 5,
-      date: 'Just now',
-      comment: 'Manifest verification completed. Safe sandboxed bundle.',
-    },
-  ];
-
-  telemetry.totalPlatformInstalls += 1;
+  miniAppReviews[generatedId] = [];
 
   res.status(201).json({
     success: true,
@@ -236,12 +227,18 @@ apiRouter.post('/miniapps/:id/reviews', (req: Request, res: Response) => {
   });
 });
 
+// Helper to estimate manifest bundle size in KB
+function payloadSizeKb(body: Record<string, unknown>): number {
+  const bytes = Buffer.byteLength(JSON.stringify(body || {}), 'utf8');
+  return Math.max(16, Math.round(bytes / 64));
+}
+
 // GET /api/developer/analytics - Telemetry & metrics
 apiRouter.get('/developer/analytics', (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
-      ...telemetry,
+      ...computeTelemetry(),
       totalMiniApps: miniAppsRegistry.length,
       categoryDistribution: {
         finance: miniAppsRegistry.filter((a) => a.category === 'finance').length,
@@ -256,22 +253,21 @@ apiRouter.get('/developer/analytics', (_req: Request, res: Response) => {
   });
 });
 
-// POST /api/auth/google - One-click Google Authentication
+// POST /api/auth/google - Google Authentication Session
 apiRouter.post('/auth/google', (req: Request, res: Response) => {
   const { email, name, avatar } = req.body;
+  const resolvedEmail = (email || '').trim();
+  const resolvedName = (name || (resolvedEmail ? resolvedEmail.split('@')[0] : 'Authenticated User')).trim();
 
   const user = {
     id: `usr-google-${Date.now()}`,
-    name: name || 'Google User',
-    email: email || 'user@gmail.com',
-    avatar:
-      avatar ||
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    name: resolvedName,
+    email: resolvedEmail || 'authenticated@omnimini.app',
+    avatar: avatar || '',
     isGoogle: true,
-    walletBalance: 248.5,
+    walletBalance: 0,
     role: 'developer',
     joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    token: `oauth_mock_jwt_${Buffer.from(email || 'user').toString('base64')}_${Date.now()}`,
   };
 
   res.json({

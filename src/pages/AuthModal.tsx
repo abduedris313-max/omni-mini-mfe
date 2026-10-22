@@ -10,9 +10,9 @@ interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const { user, setUser, signInWithGoogle, showToast, hapticFeedback, themeTokens, isDark } = useSuperApp();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState('abdu.edris313@gmail.com');
-  const [password, setPassword] = useState('••••••••••••');
-  const [fullName, setFullName] = useState('Abdu Edris');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -22,8 +22,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     hapticFeedback('medium');
     try {
       await signInWithGoogle({
-        name: fullName || 'Abdu Edris',
-        email: email || 'abdu.edris313@gmail.com',
+        name: fullName.trim() || (email.trim() ? email.trim().split('@')[0] : 'Authenticated User'),
+        email: email.trim() || 'authenticated@omnimini.app',
       });
       onClose();
     } catch {
@@ -35,7 +35,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
   const handleEmailAuth = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!email.trim() || !password.trim()) {
       showToast('Please enter both email and password', 'warning');
       return;
     }
@@ -47,18 +47,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       setIsLoading(false);
       setUser({
         id: `usr-email-${Date.now()}`,
-        name: fullName || email.split('@')[0],
-        email,
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80',
+        name: fullName.trim() || email.trim().split('@')[0],
+        email: email.trim(),
+        avatar: '',
         isGoogle: false,
-        walletBalance: 250.0,
+        walletBalance: 0,
         role: 'consumer',
-        joinedDate: 'October 2026',
+        joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
       });
       showToast(mode === 'signin' ? 'Welcome back!' : 'Account created successfully!', 'success');
       hapticFeedback('success');
       onClose();
-    }, 600);
+    }, 400);
   };
 
   return (

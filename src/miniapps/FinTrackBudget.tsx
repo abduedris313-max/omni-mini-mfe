@@ -35,82 +35,9 @@ export interface SavingsGoal {
   color: string;
 }
 
-const DEFAULT_ENTRIES: FinTrackEntry[] = [
-  {
-    id: 'ft-1',
-    title: 'Tech Corp Monthly Salary',
-    amount: 4850,
-    type: 'income',
-    category: 'Income',
-    date: 'Oct 1, 2026',
-  },
-  {
-    id: 'ft-2',
-    title: 'Downtown Loft Rent',
-    amount: 1450,
-    type: 'expense',
-    category: 'Housing',
-    date: 'Oct 2, 2026',
-  },
-  {
-    id: 'ft-3',
-    title: 'Whole Foods Organic Market',
-    amount: 164.5,
-    type: 'expense',
-    category: 'Dining',
-    date: 'Oct 6, 2026',
-    settledViaWallet: true,
-  },
-  {
-    id: 'ft-4',
-    title: 'Cloud & Streaming Subscriptions',
-    amount: 49.99,
-    type: 'expense',
-    category: 'Subscriptions',
-    date: 'Oct 9, 2026',
-  },
-  {
-    id: 'ft-5',
-    title: 'UrbanRide EV Commute Pass',
-    amount: 88.0,
-    type: 'expense',
-    category: 'Transit',
-    date: 'Oct 12, 2026',
-    settledViaWallet: true,
-  },
-  {
-    id: 'ft-6',
-    title: 'Wireless Noise-Canceling Headphones',
-    amount: 249.0,
-    type: 'expense',
-    category: 'Shopping',
-    date: 'Oct 15, 2026',
-  },
-];
+const DEFAULT_ENTRIES: FinTrackEntry[] = [];
 
-const DEFAULT_GOALS: SavingsGoal[] = [
-  {
-    id: 'goal-1',
-    name: 'Emergency Reserve (6 Mo)',
-    targetAmount: 10000,
-    savedAmount: 6850,
-    color: '#10b981',
-  },
-  {
-    id: 'goal-2',
-    name: 'Tokyo Autumn Trip',
-    targetAmount: 3500,
-    savedAmount: 2150,
-    color: '#6366f1',
-  },
-  {
-    id: 'goal-3',
-    name: 'Next-Gen Workstation',
-    targetAmount: 2400,
-    savedAmount: 1200,
-    color: '#f59e0b',
-  },
-];
+const DEFAULT_GOALS: SavingsGoal[] = [];
 
 const CATEGORY_COLORS: Record<FinTrackEntry['category'], string> = {
   Housing: '#6366f1',
@@ -134,13 +61,13 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [hideBalances, setHideBalances] = useState<boolean>(Boolean(settings.privacyMaskDefault));
 
   const [entries, setEntries] = useState<FinTrackEntry[]>(() => {
-    const saved = sdk.storage.getItem('fintrack_entries_v1');
-    return Array.isArray(saved) && saved.length > 0 ? saved : DEFAULT_ENTRIES;
+    const saved = sdk.storage.getItem('fintrack_entries_v2');
+    return Array.isArray(saved) ? saved : DEFAULT_ENTRIES;
   });
 
   const [goals, setGoals] = useState<SavingsGoal[]>(() => {
-    const saved = sdk.storage.getItem('fintrack_goals_v1');
-    return Array.isArray(saved) && saved.length > 0 ? saved : DEFAULT_GOALS;
+    const saved = sdk.storage.getItem('fintrack_goals_v2');
+    return Array.isArray(saved) ? saved : DEFAULT_GOALS;
   });
 
   // New Transaction Form State
@@ -155,11 +82,11 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [newGoalTarget, setNewGoalTarget] = useState('');
 
   useEffect(() => {
-    sdk.storage.setItem('fintrack_entries_v1', entries);
+    sdk.storage.setItem('fintrack_entries_v2', entries);
   }, [entries, sdk.storage]);
 
   useEffect(() => {
-    sdk.storage.setItem('fintrack_goals_v1', goals);
+    sdk.storage.setItem('fintrack_goals_v2', goals);
   }, [goals, sdk.storage]);
 
   // Register lifecycle hooks to auto-mask balances when mini app pauses if configured
@@ -473,65 +400,92 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
           {/* Entries List */}
           <div className="space-y-2">
-            {filteredEntries.map((entry) => (
+            {filteredEntries.length === 0 ? (
               <div
-                key={entry.id}
                 style={{
                   backgroundColor: tokens.bgCard,
                   borderColor: tokens.borderDefault,
                 }}
-                className="p-3.5 rounded-2xl border flex items-center justify-between gap-3"
+                className="p-6 rounded-2xl border text-center space-y-2"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
-                    style={{ backgroundColor: CATEGORY_COLORS[entry.category] || '#6366f1' }}
-                  >
-                    {entry.type === 'income' ? (
-                      <TrendingUp className="w-4 h-4" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold truncate">{entry.title}</div>
+                <TrendingUp className="w-6 h-6 mx-auto opacity-50" />
+                <p className="text-xs font-bold">No Transactions Recorded Yet</p>
+                <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
+                  Tap Add New to record your income or expenses and track monthly cashflow.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('add')}
+                  style={{
+                    backgroundColor: tokens.accentPrimary,
+                    color: tokens.accentContrast,
+                  }}
+                  className="px-4 py-1.5 rounded-xl text-xs font-bold transition ios-active mt-1"
+                >
+                  + Record First Transaction
+                </button>
+              </div>
+            ) : (
+              filteredEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-3.5 rounded-2xl border flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className="flex items-center gap-1.5 text-[10px] mt-0.5"
-                      style={{ color: tokens.textMuted }}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
+                      style={{ backgroundColor: CATEGORY_COLORS[entry.category] || '#6366f1' }}
                     >
-                      <span>{entry.category}</span>
-                      <span>•</span>
-                      <span>{entry.date}</span>
-                      {entry.settledViaWallet && (
-                        <>
-                          <span>•</span>
-                          <span className="text-emerald-400 font-semibold">Super App Wallet</span>
-                        </>
+                      {entry.type === 'income' ? (
+                        <TrendingUp className="w-4 h-4" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4" />
                       )}
                     </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold truncate">{entry.title}</div>
+                      <div
+                        className="flex items-center gap-1.5 text-[10px] mt-0.5"
+                        style={{ color: tokens.textMuted }}
+                      >
+                        <span>{entry.category}</span>
+                        <span>•</span>
+                        <span>{entry.date}</span>
+                        {entry.settledViaWallet && (
+                          <>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-semibold">Super App Wallet</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`text-xs font-extrabold ${
+                        entry.type === 'income' ? 'text-emerald-400' : ''
+                      }`}
+                    >
+                      {entry.type === 'income' ? '+' : '-'}
+                      {formatMoney(entry.amount)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEntry(entry.id)}
+                      className="p-1 text-slate-400 hover:text-rose-400 transition"
+                      aria-label="Delete transaction"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <span
-                    className={`text-xs font-extrabold ${
-                      entry.type === 'income' ? 'text-emerald-400' : ''
-                    }`}
-                  >
-                    {entry.type === 'income' ? '+' : '-'}
-                    {formatMoney(entry.amount)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEntry(entry.id)}
-                    className="p-1 text-slate-400 hover:text-rose-400 transition"
-                    aria-label="Delete transaction"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -630,50 +584,66 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       {/* TAB 3: SAVINGS GOALS VAULT */}
       {activeTab === 'goals' && (
         <div className="space-y-3">
-          {goals.map((goal) => {
-            const pct = Math.min(100, Math.round((goal.savedAmount / goal.targetAmount) * 100));
-            return (
-              <div
-                key={goal.id}
-                style={{
-                  backgroundColor: tokens.bgCard,
-                  borderColor: tokens.borderDefault,
-                }}
-                className="p-4 rounded-2xl border space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold">{goal.name}</h4>
-                    <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
-                      {formatMoney(goal.savedAmount)} of {formatMoney(goal.targetAmount)} ({pct}%)
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleContributeToGoal(goal, 50)}
-                    style={{
-                      backgroundColor: tokens.accentPrimary,
-                      color: tokens.accentContrast,
-                    }}
-                    className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition ios-active"
-                  >
-                    <Wallet className="w-3 h-3" />
-                    <span>+{currencySymbol}50</span>
-                  </button>
-                </div>
-
+          {goals.length === 0 ? (
+            <div
+              style={{
+                backgroundColor: tokens.bgCard,
+                borderColor: tokens.borderDefault,
+              }}
+              className="p-6 rounded-2xl border text-center space-y-1.5"
+            >
+              <Target className="w-6 h-6 mx-auto opacity-50" />
+              <p className="text-xs font-bold">No Savings Goals Yet</p>
+              <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
+                Create a savings goal below to track progress and deposit funds from your Super App Wallet.
+              </p>
+            </div>
+          ) : (
+            goals.map((goal) => {
+              const pct = Math.min(100, Math.round((goal.savedAmount / goal.targetAmount) * 100));
+              return (
                 <div
-                  className="w-full h-2 rounded-full overflow-hidden"
-                  style={{ backgroundColor: tokens.bgSurface }}
+                  key={goal.id}
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-4 rounded-2xl border space-y-3"
                 >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold">{goal.name}</h4>
+                      <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
+                        {formatMoney(goal.savedAmount)} of {formatMoney(goal.targetAmount)} ({pct}%)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleContributeToGoal(goal, 50)}
+                      style={{
+                        backgroundColor: tokens.accentPrimary,
+                        color: tokens.accentContrast,
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition ios-active"
+                    >
+                      <Wallet className="w-3 h-3" />
+                      <span>+{currencySymbol}50</span>
+                    </button>
+                  </div>
+
                   <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{ width: `${pct}%`, backgroundColor: goal.color }}
-                  />
+                    className="w-full h-2 rounded-full overflow-hidden"
+                    style={{ backgroundColor: tokens.bgSurface }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{ width: `${pct}%`, backgroundColor: goal.color }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
 
           {/* Create New Savings Goal */}
           <form

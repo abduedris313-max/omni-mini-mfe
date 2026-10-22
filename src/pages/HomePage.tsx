@@ -16,6 +16,10 @@ import {
   ChevronRight,
   Flame,
   Droplet,
+  Calculator,
+  PieChart,
+  Boxes,
+  User as UserIcon,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -36,9 +40,33 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Read live persisted FitSync metrics from sandboxed storage (defaults to 0)
+  const readFitSyncMetric = (key: string): number => {
+    try {
+      const raw = localStorage.getItem(`miniapp_store_fitsync-health_${key}`);
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === 'number' && Number.isFinite(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return 0;
+  };
+
+  const liveSteps = readFitSyncMetric('steps');
+  const liveCalories = readFitSyncMetric('calories');
+  const liveWaterMl = readFitSyncMetric('water');
+
   // Icon mapping
   const getAppIcon = (_iconName: string, id: string) => {
     switch (id) {
+      case 'miniapp-starter-template':
+        return <Boxes className="w-6 h-6 text-white" />;
+      case 'ethiotax-salary':
+        return <Calculator className="w-6 h-6 text-white" />;
+      case 'fintrack-budget':
+        return <PieChart className="w-6 h-6 text-white" />;
       case 'paypulse-wallet':
         return <WalletCards className="w-6 h-6 text-white" />;
       case 'urbanride-transit':
@@ -99,13 +127,27 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
             backgroundColor: themeTokens.bgSurface,
             borderColor: themeTokens.borderDefault,
           }}
+          aria-label="User Profile & Authentication"
         >
-          <img
-            src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
-            alt="User"
-            className="w-8 h-8 rounded-full object-cover border"
-            style={{ borderColor: themeTokens.accentPrimary }}
-          />
+          {user?.avatar ? (
+            <img
+              src={user.avatar}
+              alt={user.name}
+              className="w-8 h-8 rounded-full object-cover border"
+              style={{ borderColor: themeTokens.accentPrimary }}
+            />
+          ) : (
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border"
+              style={{
+                backgroundColor: themeTokens.accentMuted,
+                borderColor: themeTokens.accentPrimary,
+                color: themeTokens.accentPrimary,
+              }}
+            >
+              {user?.name ? user.name.slice(0, 2).toUpperCase() : <UserIcon className="w-4 h-4" />}
+            </div>
+          )}
         </button>
       </div>
 
@@ -178,12 +220,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
               className="text-xl font-black"
               style={{ color: themeTokens.textPrimary }}
             >
-              7,420
+              {liveSteps.toLocaleString()} <span className="text-[10px] font-semibold opacity-60">steps</span>
             </div>
             <div className="flex gap-2 text-[10px] mt-0.5" style={{ color: themeTokens.textSecondary }}>
-              <span className="text-rose-500 flex items-center gap-0.5"><Flame className="w-2.5 h-2.5" /> 480k</span>
+              <span className="text-rose-500 flex items-center gap-0.5"><Flame className="w-2.5 h-2.5" /> {liveCalories} kcal</span>
               <span className="flex items-center gap-0.5" style={{ color: themeTokens.accentPrimary }}>
-                <Droplet className="w-2.5 h-2.5" /> 1.7L
+                <Droplet className="w-2.5 h-2.5" /> {(liveWaterMl / 1000).toFixed(1)}L
               </span>
             </div>
           </div>

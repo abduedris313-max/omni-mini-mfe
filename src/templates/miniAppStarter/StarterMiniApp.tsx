@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MiniAppBridgeSDK } from '../../types/miniapp';
+import { STARTER_MINI_APP_MANIFEST } from './manifest';
 import {
   Boxes,
   UserCheck,
@@ -76,30 +77,10 @@ export const StarterMiniApp: React.FC<StarterMiniAppProps> = ({ sdk }) => {
   const [isSecureVaultUnlocked, setIsSecureVaultUnlocked] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
 
-  // Scoped Storage Demo State
+  // Scoped Storage State
   const [items, setItems] = useState<StarterTodoItem[]>(() => {
-    const saved = sdk.storage.getItem('starter_items');
-    if (Array.isArray(saved) && saved.length > 0) return saved;
-    return [
-      {
-        id: 'item-1',
-        text: 'Fork src/templates/miniAppStarter',
-        completed: true,
-        createdAt: 'Just now',
-      },
-      {
-        id: 'item-2',
-        text: 'Test Biometrics Secure Login vault',
-        completed: false,
-        createdAt: 'Just now',
-      },
-      {
-        id: 'item-3',
-        text: 'Inspect onStart & onPause lifecycle hooks',
-        completed: false,
-        createdAt: 'Just now',
-      },
-    ];
+    const saved = sdk.storage.getItem('starter_items_v2');
+    return Array.isArray(saved) ? saved : [];
   });
   const [newItemText, setNewItemText] = useState('');
   const [lastReceipt, setLastReceipt] = useState<string | null>(null);
@@ -156,7 +137,7 @@ export const StarterMiniApp: React.FC<StarterMiniAppProps> = ({ sdk }) => {
   }, [sdk]);
 
   useEffect(() => {
-    sdk.storage.setItem('starter_items', items);
+    sdk.storage.setItem('starter_items_v2', items);
   }, [items, sdk.storage]);
 
   const handleBiometricUnlock = async () => {
@@ -407,9 +388,9 @@ export const StarterMiniApp: React.FC<StarterMiniAppProps> = ({ sdk }) => {
                   </div>
                   <div className="text-[10px] space-y-1" style={{ color: tokens.textSecondary }}>
                     <div>
-                      <strong>Signing Key:</strong>{' '}
+                      <strong>App Scope:</strong>{' '}
                       {showSecretKey
-                        ? 'omk_live_98f72a4c11e90b3d7f61'
+                        ? `${STARTER_MINI_APP_MANIFEST.id}::${user?.id || 'unauthenticated'}`
                         : '••••••••••••••••••••••••'}
                     </div>
                     <div>
@@ -647,42 +628,55 @@ export const StarterMiniApp: React.FC<StarterMiniAppProps> = ({ sdk }) => {
           </form>
 
           <div className="space-y-1.5">
-            {items.map((item) => (
+            {items.length === 0 ? (
               <div
-                key={item.id}
                 style={{
                   backgroundColor: tokens.bgSurface,
                   borderColor: tokens.borderDefault,
+                  color: tokens.textSecondary,
                 }}
-                className="p-2.5 rounded-xl border flex items-center justify-between gap-2"
+                className="p-4 rounded-xl border text-center text-xs"
               >
-                <button
-                  type="button"
-                  onClick={() => handleToggleItem(item.id)}
-                  className="flex items-center gap-2 text-left flex-1 min-w-0"
-                >
-                  <CheckCircle2
-                    className={`w-4 h-4 shrink-0 ${
-                      item.completed ? 'text-emerald-400' : 'opacity-40'
-                    }`}
-                  />
-                  <span
-                    className={`text-xs truncate ${
-                      item.completed ? 'line-through opacity-60' : 'font-medium'
-                    }`}
-                  >
-                    {item.text}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteItem(item.id)}
-                  className="p-1 text-rose-400 hover:opacity-80"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                No items stored yet. Add an entry above to persist it in isolated mini app storage.
               </div>
-            ))}
+            ) : (
+              items.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    backgroundColor: tokens.bgSurface,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-2.5 rounded-xl border flex items-center justify-between gap-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleToggleItem(item.id)}
+                    className="flex items-center gap-2 text-left flex-1 min-w-0"
+                  >
+                    <CheckCircle2
+                      className={`w-4 h-4 shrink-0 ${
+                        item.completed ? 'text-emerald-400' : 'opacity-40'
+                      }`}
+                    />
+                    <span
+                      className={`text-xs truncate ${
+                        item.completed ? 'line-through opacity-60' : 'font-medium'
+                      }`}
+                    >
+                      {item.text}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="p-1 text-rose-400 hover:opacity-80"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

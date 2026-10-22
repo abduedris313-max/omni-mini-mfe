@@ -27,26 +27,9 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
   const defaultCategory = settings.defaultCategory || 'ideas';
 
   const [notes, setNotes] = useState<Note[]>(() => {
-    const saved = sdk.storage.getItem('user_notes');
+    const saved = sdk.storage.getItem('user_notes_v2');
     if (saved && Array.isArray(saved)) return saved;
-    return [
-      {
-        id: 'note-1',
-        title: 'Micro Frontend Super App Architecture',
-        category: 'ideas',
-        content: 'Design sandboxed MiniAppBridge with scoped permissions and pluggable settings provider.',
-        completed: false,
-        updatedAt: 'Today',
-      },
-      {
-        id: 'note-2',
-        title: 'Publish PayPulse v2.4.0',
-        category: 'work',
-        content: 'Check biometric prompt and shared Super App wallet deduction hooks.',
-        completed: true,
-        updatedAt: 'Yesterday',
-      },
-    ];
+    return [];
   });
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -55,8 +38,8 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    sdk.storage.setItem('user_notes', notes);
-  }, [notes]);
+    sdk.storage.setItem('user_notes_v2', notes);
+  }, [notes, sdk.storage]);
 
   const addNote = () => {
     if (!newTitle.trim()) {
@@ -186,44 +169,61 @@ export const NoteFlowApp: React.FC<NoteFlowProps> = ({ sdk }) => {
 
       {/* Notes List */}
       <div className="space-y-2.5">
-        {filteredNotes.map((note) => (
+        {filteredNotes.length === 0 ? (
           <div
-            key={note.id}
-            className={`p-3.5 rounded-2xl bg-slate-900/80 border transition flex items-start gap-3 backdrop-blur-md ${
-              note.completed ? 'border-slate-800 opacity-60' : 'border-slate-800/80'
-            }`}
+            style={{
+              backgroundColor: sdk.theme.tokens.bgCard,
+              borderColor: sdk.theme.tokens.borderDefault,
+              color: sdk.theme.tokens.textPrimary,
+            }}
+            className="p-6 rounded-2xl border text-center space-y-1.5"
           >
-            <button
-              onClick={() => toggleComplete(note.id)}
-              className="mt-0.5 text-purple-400 hover:text-purple-300"
+            <FileText className="w-6 h-6 mx-auto opacity-50" />
+            <p className="text-xs font-bold">No Notes Yet</p>
+            <p className="text-[11px]" style={{ color: sdk.theme.tokens.textSecondary }}>
+              Create a note above to save encrypted markdown thoughts and checklists.
+            </p>
+          </div>
+        ) : (
+          filteredNotes.map((note) => (
+            <div
+              key={note.id}
+              className={`p-3.5 rounded-2xl bg-slate-900/80 border transition flex items-start gap-3 backdrop-blur-md ${
+                note.completed ? 'border-slate-800 opacity-60' : 'border-slate-800/80'
+              }`}
             >
-              {note.completed ? (
-                <CheckCircle2 className="w-4 h-4 fill-purple-600 text-slate-950" />
-              ) : (
-                <Circle className="w-4 h-4" />
-              )}
-            </button>
+              <button
+                onClick={() => toggleComplete(note.id)}
+                className="mt-0.5 text-purple-400 hover:text-purple-300"
+              >
+                {note.completed ? (
+                  <CheckCircle2 className="w-4 h-4 fill-purple-600 text-slate-950" />
+                ) : (
+                  <Circle className="w-4 h-4" />
+                )}
+              </button>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <h4 className={`text-xs font-bold ${note.completed ? 'line-through text-slate-500' : 'text-white'}`}>
-                  {note.title}
-                </h4>
-                <span className="text-[10px] text-purple-300/80 font-mono">#{note.category}</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{note.content}</p>
-              <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-                <span>Updated {note.updatedAt}</span>
-                <button
-                  onClick={() => deleteNote(note.id)}
-                  className="p-1 text-slate-500 hover:text-rose-400 transition"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h4 className={`text-xs font-bold ${note.completed ? 'line-through text-slate-500' : 'text-white'}`}>
+                    {note.title}
+                  </h4>
+                  <span className="text-[10px] text-purple-300/80 font-mono">#{note.category}</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{note.content}</p>
+                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+                  <span>Updated {note.updatedAt}</span>
+                  <button
+                    onClick={() => deleteNote(note.id)}
+                    className="p-1 text-slate-500 hover:text-rose-400 transition"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

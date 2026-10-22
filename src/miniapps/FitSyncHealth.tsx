@@ -18,9 +18,18 @@ export const FitSyncApp: React.FC<FitSyncProps> = ({ sdk }) => {
   const stepGoal = Number(settings.dailyStepGoal || 10000);
   const waterTarget = Number(settings.dailyWaterTarget || 2500);
 
-  const [steps, setSteps] = useState(7420);
-  const [waterMl, setWaterMl] = useState(1750);
-  const [activeCalories, setActiveCalories] = useState(480);
+  const [steps, setSteps] = useState<number>(() => {
+    const saved = sdk.storage.getItem('steps');
+    return typeof saved === 'number' && Number.isFinite(saved) ? saved : 0;
+  });
+  const [waterMl, setWaterMl] = useState<number>(() => {
+    const saved = sdk.storage.getItem('water');
+    return typeof saved === 'number' && Number.isFinite(saved) ? saved : 0;
+  });
+  const [activeCalories, setActiveCalories] = useState<number>(() => {
+    const saved = sdk.storage.getItem('calories');
+    return typeof saved === 'number' && Number.isFinite(saved) ? saved : 0;
+  });
 
   const stepPercentage = Math.min(100, Math.round((steps / stepGoal) * 100));
   const waterPercentage = Math.min(100, Math.round((waterMl / waterTarget) * 100));
@@ -29,19 +38,25 @@ export const FitSyncApp: React.FC<FitSyncProps> = ({ sdk }) => {
     sdk.ui.hapticFeedback('light');
     setSteps((prev) => {
       const next = prev + count;
+      sdk.storage.setItem('steps', next);
       if (next >= stepGoal && prev < stepGoal) {
-        sdk.ui.showToast('🎉 Goal Achieved! 10,000 Step Ring closed!', 'success');
+        sdk.ui.showToast('🎉 Goal Achieved! Daily Step Ring closed!', 'success');
         sdk.ui.hapticFeedback('success');
       }
       return next;
     });
-    setActiveCalories((prev) => prev + Math.round(count * 0.04));
+    setActiveCalories((prev) => {
+      const nextCal = prev + Math.round(count * 0.04);
+      sdk.storage.setItem('calories', nextCal);
+      return nextCal;
+    });
   };
 
   const addWater = (ml: number) => {
     sdk.ui.hapticFeedback('light');
     setWaterMl((prev) => {
       const next = prev + ml;
+      sdk.storage.setItem('water', next);
       if (next >= waterTarget && prev < waterTarget) {
         sdk.ui.showToast('💧 Daily Hydration Target Reached!', 'success');
         sdk.ui.hapticFeedback('success');

@@ -48,10 +48,13 @@ export const SetupWizardModal: React.FC = () => {
   const [selectedAccent, setSelectedAccent] = useState<'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet'>(settings.accentColor || 'blue');
   const [selectedBezel, setSelectedBezel] = useState<boolean>(settings.deviceBezel);
   const [selectedShowStatusBar, setSelectedShowStatusBar] = useState<boolean>(settings.showStatusBar !== false);
-  const [displayName, setDisplayName] = useState<string>(user?.name || 'Explorer User');
+  const [displayName, setDisplayName] = useState<string>(user?.name || '');
   const [selectedRole, setSelectedRole] = useState<'consumer' | 'developer' | 'admin'>(user?.role || 'consumer');
-  const [starterBalance, setStarterBalance] = useState<number>(100);
+  const [starterBalance, setStarterBalance] = useState<number>(0);
   const [selectedAppIds, setSelectedAppIds] = useState<string[]>([
+    'miniapp-starter-template',
+    'ethiotax-salary',
+    'fintrack-budget',
     'paypulse-wallet',
     'urbanride-transit',
     'foodbite-express',
@@ -119,7 +122,7 @@ export const SetupWizardModal: React.FC = () => {
       accentColor: selectedAccent,
       deviceBezel: selectedBezel,
       showStatusBar: selectedShowStatusBar,
-      displayName: displayName.trim() || user?.name || 'Explorer User',
+      displayName: displayName.trim(),
       role: selectedRole,
       starterBalance: starterBalance,
       installedAppIds: selectedAppIds,
@@ -134,8 +137,8 @@ export const SetupWizardModal: React.FC = () => {
       accentColor: settings.accentColor,
       deviceBezel: settings.deviceBezel,
       showStatusBar: true,
-      starterBalance: 50,
-      installedAppIds: ['paypulse-wallet', 'urbanride-transit', 'foodbite-express'],
+      starterBalance: 0,
+      installedAppIds: selectedAppIds,
       enablePermissions: true,
     });
   };
@@ -600,7 +603,7 @@ export const SetupWizardModal: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  {[50, 100, 250].map((amt) => {
+                  {[0, 50, 100].map((amt) => {
                     const isSelected = starterBalance === amt;
                     return (
                       <button
@@ -617,7 +620,7 @@ export const SetupWizardModal: React.FC = () => {
                         }}
                         className="py-2.5 rounded-2xl border font-black text-xs transition"
                       >
-                        +${amt}
+                        ${amt}.00
                       </button>
                     );
                   })}

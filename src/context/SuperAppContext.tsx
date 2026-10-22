@@ -128,7 +128,7 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
       preferredVehicleClass: 'comfort_ev',
       quietRideMode: true,
       defaultTipPercent: 15,
-      emergencyContactPhone: '+1 (555) 019-2834',
+      emergencyContactPhone: '',
     },
     'foodbite-express': {
       dietaryFilter: 'none',
@@ -153,35 +153,24 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
   },
 };
 
-const DEFAULT_USER: SuperAppUser = {
-  id: 'usr-google-8821',
-  name: 'Abdu Edris',
-  email: 'abdu.edris313@gmail.com',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-  isGoogle: true,
-  walletBalance: 345.5,
-  role: 'developer',
-  joinedDate: 'October 2026',
-};
-
 export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // 1. User Authentication
+  // 1. User Authentication (clean unauthenticated initial state unless signed in)
   const [user, setUserState] = useState<SuperAppUser | null>(() => {
     try {
-      const saved = localStorage.getItem('omnimini_user_v2');
+      const saved = localStorage.getItem('omnimini_user_v3');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn('Failed loading user from storage', e);
     }
-    return DEFAULT_USER;
+    return null;
   });
 
   const setUser = (u: SuperAppUser | null) => {
     setUserState(u);
     if (u) {
-      localStorage.setItem('omnimini_user_v2', JSON.stringify(u));
+      localStorage.setItem('omnimini_user_v3', JSON.stringify(u));
     } else {
-      localStorage.removeItem('omnimini_user_v2');
+      localStorage.removeItem('omnimini_user_v3');
     }
   };
 
@@ -277,17 +266,17 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const [recentAppIds, setRecentAppIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('omnimini_recent_apps_v2');
+      const saved = localStorage.getItem('omnimini_recent_apps_v3');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn('Failed loading recent apps', e);
     }
-    return ['paypulse-wallet', 'foodbite-express', 'urbanride-transit'];
+    return [];
   });
 
   const clearRecentApps = () => {
     setRecentAppIds([]);
-    localStorage.setItem('omnimini_recent_apps_v2', JSON.stringify([]));
+    localStorage.setItem('omnimini_recent_apps_v3', JSON.stringify([]));
     showToast('Recent launch history cleared', 'info');
     hapticFeedback('light');
   };
@@ -296,7 +285,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     setActiveMiniAppId(appId);
     setRecentAppIds((prev) => {
       const next = [appId, ...prev.filter((id) => id !== appId)].slice(0, 12);
-      localStorage.setItem('omnimini_recent_apps_v2', JSON.stringify(next));
+      localStorage.setItem('omnimini_recent_apps_v3', JSON.stringify(next));
       return next;
     });
     hapticFeedback('light');
@@ -310,50 +299,25 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   // 5. Shared Wallet & Transactions across mini apps
   const [walletBalance, setWalletBalance] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('omnimini_wallet_balance_v2');
-      if (saved) return parseFloat(saved);
+      const saved = localStorage.getItem('omnimini_wallet_balance_v3');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (Number.isFinite(parsed)) return parsed;
+      }
     } catch (e) {
       console.warn('Failed loading wallet balance', e);
     }
-    return 345.5;
+    return SUPER_APP_STARTER_CONFIG.wallet.starterBalance;
   });
 
   const [transactions, setTransactions] = useState<WalletTransaction[]>(() => {
     try {
-      const saved = localStorage.getItem('omnimini_transactions_v2');
+      const saved = localStorage.getItem('omnimini_transactions_v3');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn('Failed loading transactions', e);
     }
-    return [
-      {
-        id: 'tx-1',
-        appId: 'foodbite-express',
-        appName: 'FoodBite Express',
-        amount: 24.5,
-        type: 'debit',
-        description: 'Artisan Poke Bowl + Green Smoothie',
-        timestamp: 'Today, 1:15 PM',
-      },
-      {
-        id: 'tx-2',
-        appId: 'urbanride-transit',
-        appName: 'UrbanRide Transit',
-        amount: 14.8,
-        type: 'debit',
-        description: 'Comfort EV Trip to Downtown Core',
-        timestamp: 'Yesterday, 8:45 AM',
-      },
-      {
-        id: 'tx-3',
-        appId: 'paypulse-wallet',
-        appName: 'PayPulse Wallet',
-        amount: 100.0,
-        type: 'credit',
-        description: 'Apple Pay Shared Wallet Top Up',
-        timestamp: 'Oct 1, 2026',
-      },
-    ];
+    return [];
   });
 
   const deductWallet = async (amount: number, description: string, appId: string): Promise<boolean> => {
@@ -365,7 +329,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     const newBal = Number((walletBalance - amount).toFixed(2));
     setWalletBalance(newBal);
-    localStorage.setItem('omnimini_wallet_balance_v2', newBal.toString());
+    localStorage.setItem('omnimini_wallet_balance_v3', newBal.toString());
 
     const newTx: WalletTransaction = {
       id: `tx-${Date.now()}`,
@@ -374,12 +338,17 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       amount,
       type: 'debit',
       description,
-      timestamp: 'Just now',
+      timestamp: new Date().toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
     };
 
     setTransactions((prev) => {
       const next = [newTx, ...prev];
-      localStorage.setItem('omnimini_transactions_v2', JSON.stringify(next));
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
       return next;
     });
 
@@ -391,7 +360,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   const topUpWallet = (amount: number) => {
     const newBal = Number((walletBalance + amount).toFixed(2));
     setWalletBalance(newBal);
-    localStorage.setItem('omnimini_wallet_balance_v2', newBal.toString());
+    localStorage.setItem('omnimini_wallet_balance_v3', newBal.toString());
 
     const newTx: WalletTransaction = {
       id: `tx-${Date.now()}`,
@@ -399,13 +368,18 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       appName: 'OmniMini Super App',
       amount,
       type: 'credit',
-      description: 'Account Top-Up via Google / Apple Pay',
-      timestamp: 'Just now',
+      description: 'Account Top-Up',
+      timestamp: new Date().toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
     };
 
     setTransactions((prev) => {
       const next = [newTx, ...prev];
-      localStorage.setItem('omnimini_transactions_v2', JSON.stringify(next));
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
       return next;
     });
 
@@ -601,13 +575,27 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     if (data.displayName || data.role) {
       setUserState((prev) => {
-        if (!prev) return prev;
+        if (!prev) {
+          if (!data.displayName?.trim()) return null;
+          const created: SuperAppUser = {
+            id: `usr-${Date.now()}`,
+            name: data.displayName.trim(),
+            email: `${data.displayName.trim().toLowerCase().replace(/[^a-z0-9]/g, '.')}@omnimini.app`,
+            avatar: '',
+            isGoogle: false,
+            walletBalance: data.starterBalance || 0,
+            role: data.role || 'consumer',
+            joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          };
+          localStorage.setItem('omnimini_user_v3', JSON.stringify(created));
+          return created;
+        }
         const next = {
           ...prev,
           name: data.displayName || prev.name,
           role: data.role || prev.role,
         };
-        localStorage.setItem('omnimini_user_v2', JSON.stringify(next));
+        localStorage.setItem('omnimini_user_v3', JSON.stringify(next));
         return next;
       });
     }
@@ -615,7 +603,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (data.starterBalance && data.starterBalance > 0) {
       setWalletBalance((prev) => {
         const next = prev + data.starterBalance!;
-        localStorage.setItem('omnimini_wallet_balance_v2', next.toString());
+        localStorage.setItem('omnimini_wallet_balance_v3', next.toString());
         return next;
       });
       const welcomeTx: WalletTransaction = {
@@ -624,12 +612,17 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         appName: 'OmniMini Super App',
         amount: data.starterBalance,
         type: 'credit',
-        description: 'First Time User Onboarding Starter Credit',
-        timestamp: 'Just now',
+        description: 'Onboarding Wallet Deposit',
+        timestamp: new Date().toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
       };
       setTransactions((prev) => {
         const next = [welcomeTx, ...prev];
-        localStorage.setItem('omnimini_transactions_v2', JSON.stringify(next));
+        localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
         return next;
       });
     }

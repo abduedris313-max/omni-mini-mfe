@@ -43,11 +43,11 @@ export const DeveloperPage: React.FC = () => {
   const [telemetry, setTelemetry] = useState<any>(null);
 
   // Mini App Starter Generator State
-  const [scaffoldId, setScaffoldId] = useState('acme-loyalty');
-  const [scaffoldName, setScaffoldName] = useState('Acme Loyalty Club');
-  const [scaffoldShortName, setScaffoldShortName] = useState('AcmePerks');
-  const [scaffoldCategory, setScaffoldCategory] = useState<MiniAppCategory>('finance');
-  const [scaffoldSummary, setScaffoldSummary] = useState('Instant reward points, digital member card & wallet cashback');
+  const [scaffoldId, setScaffoldId] = useState('custom-mini-app');
+  const [scaffoldName, setScaffoldName] = useState('Custom Mini App');
+  const [scaffoldShortName, setScaffoldShortName] = useState('CustomApp');
+  const [scaffoldCategory, setScaffoldCategory] = useState<MiniAppCategory>('utilities');
+  const [scaffoldSummary, setScaffoldSummary] = useState('Sandboxed micro-frontend module built with OmniMini Bridge SDK');
   const [scaffoldIconBg, setScaffoldIconBg] = useState('#6366f1');
   const [scaffoldPerms, setScaffoldPerms] = useState<MiniAppPermission[]>(['storage', 'auth']);
   const [activeCodePreview, setActiveCodePreview] = useState<'component' | 'manifest' | 'superapp'>('component');
@@ -330,15 +330,17 @@ export const DeveloperPage: React.FC = () => {
                 className="text-[10px] uppercase font-bold"
                 style={{ color: themeTokens.textSecondary }}
               >
-                Total Installs
+                Registered Mini Apps
               </span>
               <div
                 className="text-xl font-extrabold mt-1"
                 style={{ color: themeTokens.textPrimary }}
               >
-                {telemetry?.totalPlatformInstalls ? telemetry.totalPlatformInstalls.toLocaleString() : '68,420'}
+                {availableApps.length}
               </div>
-              <div className="text-[10px] text-emerald-400 mt-0.5">↑ 14% this month</div>
+              <div className="text-[10px] text-emerald-400 mt-0.5">
+                {(telemetry?.totalPlatformInstalls ?? 0).toLocaleString()} total installs
+              </div>
             </div>
 
             <div
@@ -355,7 +357,7 @@ export const DeveloperPage: React.FC = () => {
                 Crash-Free Rate
               </span>
               <div className="text-xl font-extrabold text-emerald-400 mt-1">
-                {telemetry?.crashFreeSessionRate ?? '99.95'}%
+                {telemetry?.crashFreeSessionRate ?? '100'}%
               </div>
               <div
                 className="text-[10px] mt-0.5"
