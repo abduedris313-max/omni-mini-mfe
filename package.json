@@ -1,15 +1,27 @@
 {
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
+  "name": "omni-mini-mfe",
+  "private": false,
+  "version": "1.0.0",
+  "description": "Micro-Frontend Super App & Mini App Starter Template & CLI Scaffolding Package",
   "type": "module",
+  "bin": {
+    "omni-mini-mfe": "./bin/omni-mini-mfe.mjs",
+    "omni-mini-mfe:create-super-app": "./bin/create-super-app.mjs",
+    "omni-mini-mfe:create-mini-app": "./bin/create-mini-app.mjs",
+    "create-super-app": "./bin/create-super-app.mjs",
+    "create-mini-app": "./bin/create-mini-app.mjs"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "omni-mini-mfe:create-super-app": "node ./bin/omni-mini-mfe.mjs create-super-app",
+    "omni-mini-mfe:create-mini-app": "node ./bin/omni-mini-mfe.mjs create-mini-app",
+    "create-super-app": "node ./bin/omni-mini-mfe.mjs create-super-app",
+    "create-mini-app": "node ./bin/omni-mini-mfe.mjs create-mini-app"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

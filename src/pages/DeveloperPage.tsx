@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useSuperApp } from '../context/SuperAppContext';
 import { MiniAppManifest, MiniAppCategory, MiniAppPermission, MiniAppSettingField } from '../types/miniapp';
 import { repositoryService } from '../services/repositoryService';
+import { SUPER_APP_STARTER_CONFIG } from '../config/superAppStarter.config';
+import { generateMiniAppStarterCode } from '../templates/miniAppStarter';
 import {
   Code,
   LayoutDashboard,
@@ -20,19 +22,36 @@ import {
   Palette,
   ArrowRight,
   ExternalLink,
+  Boxes,
+  Rocket,
+  Download,
+  FileCode2,
 } from 'lucide-react';
 
 export const DeveloperPage: React.FC = () => {
   const {
     availableApps,
     refreshApps,
+    installApp,
+    openMiniApp,
     showToast,
     hapticFeedback,
     themeTokens,
     isDark,
   } = useSuperApp();
-  const [activeSection, setActiveSection] = useState<'console' | 'guide'>('console');
+  const [activeSection, setActiveSection] = useState<'console' | 'templates' | 'guide'>('console');
   const [telemetry, setTelemetry] = useState<any>(null);
+
+  // Mini App Starter Generator State
+  const [scaffoldId, setScaffoldId] = useState('acme-loyalty');
+  const [scaffoldName, setScaffoldName] = useState('Acme Loyalty Club');
+  const [scaffoldShortName, setScaffoldShortName] = useState('AcmePerks');
+  const [scaffoldCategory, setScaffoldCategory] = useState<MiniAppCategory>('finance');
+  const [scaffoldSummary, setScaffoldSummary] = useState('Instant reward points, digital member card & wallet cashback');
+  const [scaffoldIconBg, setScaffoldIconBg] = useState('#6366f1');
+  const [scaffoldPerms, setScaffoldPerms] = useState<MiniAppPermission[]>(['storage', 'auth']);
+  const [activeCodePreview, setActiveCodePreview] = useState<'component' | 'manifest' | 'superapp'>('component');
+  const [isScaffolding, setIsScaffolding] = useState(false);
 
   // New Mini App Wizard State
   const [isPublishingOpen, setIsPublishingOpen] = useState(false);
@@ -149,6 +168,74 @@ export const DeveloperPage: React.FC = () => {
     hapticFeedback('light');
   };
 
+  const generatedStarter = generateMiniAppStarterCode({
+    id: scaffoldId || 'custom-miniapp',
+    name: scaffoldName || 'Custom Mini App',
+    shortName: scaffoldShortName || 'CustomApp',
+    category: scaffoldCategory,
+    summary: scaffoldSummary || 'Built with OmniMini Starter Template',
+    iconBg: scaffoldIconBg,
+    permissions: scaffoldPerms,
+  });
+
+  const toggleScaffoldPerm = (perm: MiniAppPermission) => {
+    hapticFeedback('light');
+    setScaffoldPerms((prev) =>
+      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+    );
+  };
+
+  const handleDownloadStarterFile = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/typescript;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded ${filename}`, 'success');
+    hapticFeedback('light');
+  };
+
+  const handleScaffoldAndLaunch = async () => {
+    if (!scaffoldName.trim()) {
+      showToast('Please enter a Mini App Name', 'warning');
+      return;
+    }
+    setIsScaffolding(true);
+    hapticFeedback('medium');
+    try {
+      const published = await repositoryService.publishMiniApp({
+        name: scaffoldName,
+        shortName: scaffoldShortName || scaffoldName.slice(0, 10),
+        category: scaffoldCategory,
+        summary: scaffoldSummary,
+        description: scaffoldSummary,
+        iconBg: scaffoldIconBg,
+        permissions: scaffoldPerms,
+        pluggableSettingsSchema: [
+          {
+            id: 'enableNotifications',
+            label: 'Enable In-App Alerts',
+            description: `Receive updates from ${scaffoldName}`,
+            type: 'switch',
+            defaultValue: true,
+          },
+        ],
+      });
+      await refreshApps();
+      await installApp(published.id);
+      setIsScaffolding(false);
+      showToast(`Scaffolded & installed "${published.name}"!`, 'success');
+      openMiniApp(published.id);
+    } catch {
+      setIsScaffolding(false);
+      showToast('Failed to scaffold mini app', 'error');
+    }
+  };
+
   return (
     <div
       className="p-4 space-y-5 pb-28 transition-colors duration-200"
@@ -183,7 +270,7 @@ export const DeveloperPage: React.FC = () => {
             setActiveSection('console');
             hapticFeedback('light');
           }}
-          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1"
           style={{
             backgroundColor: activeSection === 'console' ? themeTokens.accentPrimary : 'transparent',
             color: activeSection === 'console' ? themeTokens.accentContrast : themeTokens.textSecondary,
@@ -191,7 +278,23 @@ export const DeveloperPage: React.FC = () => {
           }}
         >
           <LayoutDashboard className="w-3.5 h-3.5" />
-          <span>Developer Console</span>
+          <span>Console</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSection('templates');
+            hapticFeedback('light');
+          }}
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1"
+          style={{
+            backgroundColor: activeSection === 'templates' ? themeTokens.accentPrimary : 'transparent',
+            color: activeSection === 'templates' ? themeTokens.accentContrast : themeTokens.textSecondary,
+            boxShadow: activeSection === 'templates' ? `0 2px 8px ${themeTokens.accentGlow}` : undefined,
+          }}
+        >
+          <Boxes className="w-3.5 h-3.5" />
+          <span>Starter Kits</span>
         </button>
 
         <button
@@ -199,7 +302,7 @@ export const DeveloperPage: React.FC = () => {
             setActiveSection('guide');
             hapticFeedback('light');
           }}
-          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1"
           style={{
             backgroundColor: activeSection === 'guide' ? themeTokens.accentPrimary : 'transparent',
             color: activeSection === 'guide' ? themeTokens.accentContrast : themeTokens.textSecondary,
@@ -207,7 +310,7 @@ export const DeveloperPage: React.FC = () => {
           }}
         >
           <BookOpen className="w-3.5 h-3.5" />
-          <span>Developer Guide</span>
+          <span>Docs</span>
         </button>
       </div>
 
@@ -491,6 +594,383 @@ export const DeveloperPage: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      ) : activeSection === 'templates' ? (
+        /* STARTER TEMPLATES HUB (Super App Starter + Mini App Starter) */
+        <div className="space-y-4">
+          {/* 1. Reference Mini App Starter Kit Live Card */}
+          <div
+            style={{
+              background: `linear-gradient(135deg, ${themeTokens.accentPrimary}, ${themeTokens.accentHover})`,
+              boxShadow: `0 8px 24px ${themeTokens.accentGlow}`,
+              color: '#ffffff',
+            }}
+            className="rounded-3xl p-5 space-y-3 shadow-xl"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest bg-white/20 px-2.5 py-1 rounded-full">
+                Official Blueprints
+              </span>
+              <Boxes className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black">Super App & Mini App Starter Kit</h3>
+              <p className="text-xs opacity-90 mt-1 leading-relaxed">
+                This repository is pre-configured as a modular <strong>Super App Host Starter</strong> and includes a ready-to-fork <strong>Mini App Starter Template</strong> at <code>src/templates/miniAppStarter/</code>.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  await installApp('miniapp-starter-template');
+                  openMiniApp('miniapp-starter-template');
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-white text-slate-950 text-xs font-extrabold flex items-center justify-center gap-1.5 transition ios-active shadow-md"
+              >
+                <Rocket className="w-3.5 h-3.5" />
+                <span>Launch Starter Mini App</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 1.5 Node Package CLI Scaffolding Commands (omni-mini-mfe) */}
+          <div
+            style={{
+              backgroundColor: themeTokens.bgCard,
+              borderColor: themeTokens.borderDefault,
+            }}
+            className="p-4 rounded-3xl border space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4" style={{ color: themeTokens.accentPrimary }} />
+                <h3 className="text-xs font-bold uppercase tracking-wider">
+                  omni-mini-mfe CLI Commands
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">
+                v1.0.0 Node Package
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="p-2.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">
+                    1. Scaffold a New Super App Host
+                  </div>
+                  <code className="text-[11px] font-mono text-emerald-300 block truncate mt-0.5">
+                    npm run omni-mini-mfe:create-super-app -- my-super-app --yes
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyCode('npm run omni-mini-mfe:create-super-app -- my-super-app --yes')
+                  }
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-200 hover:text-white text-[10px] font-bold flex items-center gap-1 shrink-0"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
+                </button>
+              </div>
+
+              <div className="p-2.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">
+                    2. Scaffold a New Mini App Module (Live Params)
+                  </div>
+                  <code className="text-[11px] font-mono text-cyan-300 block truncate mt-0.5">
+                    {`npm run omni-mini-mfe:create-mini-app -- --id ${scaffoldId} --name "${scaffoldName}" --category ${scaffoldCategory} --yes`}
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyCode(
+                      `npm run omni-mini-mfe:create-mini-app -- --id ${scaffoldId} --name "${scaffoldName}" --category ${scaffoldCategory} --color "${scaffoldIconBg}" --permissions ${scaffoldPerms.join(',')} --yes`
+                    )
+                  }
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-200 hover:text-white text-[10px] font-bold flex items-center gap-1 shrink-0"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Interactive Mini App Starter Generator */}
+          <div
+            style={{
+              backgroundColor: themeTokens.bgCard,
+              borderColor: themeTokens.borderDefault,
+            }}
+            className="p-4 rounded-3xl border space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileCode2 className="w-4 h-4" style={{ color: themeTokens.accentPrimary }} />
+                <h3 className="text-xs font-bold uppercase tracking-wider">
+                  Mini App Starter Generator
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono" style={{ color: themeTokens.textMuted }}>
+                TypeScript + Bridge SDK
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                  Mini App Name
+                </label>
+                <input
+                  type="text"
+                  value={scaffoldName}
+                  onChange={(e) => {
+                    setScaffoldName(e.target.value);
+                    const slug = e.target.value
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/(^-|-$)/g, '');
+                    setScaffoldId(slug || 'custom-miniapp');
+                    setScaffoldShortName(e.target.value.replace(/\s+/g, '').slice(0, 10));
+                  }}
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                  Bundle ID
+                </label>
+                <input
+                  type="text"
+                  value={scaffoldId}
+                  onChange={(e) => setScaffoldId(e.target.value)}
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-xl border text-xs font-mono focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              <div>
+                <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                  Short Name
+                </label>
+                <input
+                  type="text"
+                  value={scaffoldShortName}
+                  onChange={(e) => setScaffoldShortName(e.target.value)}
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                  Category
+                </label>
+                <select
+                  value={scaffoldCategory}
+                  onChange={(e) => setScaffoldCategory(e.target.value as MiniAppCategory)}
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="mt-1 w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                >
+                  <option value="finance">Finance</option>
+                  <option value="transport">Transit</option>
+                  <option value="food">Food & Drink</option>
+                  <option value="health">Health</option>
+                  <option value="productivity">Productivity</option>
+                  <option value="utilities">Utilities</option>
+                  <option value="developer">Developer</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                  Icon Color
+                </label>
+                <input
+                  type="color"
+                  value={scaffoldIconBg}
+                  onChange={(e) => setScaffoldIconBg(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-xl border cursor-pointer bg-transparent"
+                  style={{ borderColor: themeTokens.borderDefault }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                Summary Description
+              </label>
+              <input
+                type="text"
+                value={scaffoldSummary}
+                onChange={(e) => setScaffoldSummary(e.target.value)}
+                style={{
+                  backgroundColor: themeTokens.bgInput,
+                  borderColor: themeTokens.borderDefault,
+                  color: themeTokens.textPrimary,
+                }}
+                className="mt-1 w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase" style={{ color: themeTokens.textMuted }}>
+                Sandboxed Bridge Permissions
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {(['storage', 'auth', 'notifications', 'camera', 'location', 'biometrics'] as MiniAppPermission[]).map(
+                  (perm) => {
+                    const active = scaffoldPerms.includes(perm);
+                    return (
+                      <button
+                        key={perm}
+                        type="button"
+                        onClick={() => toggleScaffoldPerm(perm)}
+                        style={{
+                          backgroundColor: active ? themeTokens.accentPrimary : themeTokens.bgSurface,
+                          color: active ? themeTokens.accentContrast : themeTokens.textSecondary,
+                          borderColor: active ? 'transparent' : themeTokens.borderDefault,
+                        }}
+                        className="px-2.5 py-1 rounded-xl border text-[11px] font-semibold capitalize transition"
+                      >
+                        {perm}
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+
+            {/* Code Preview Switcher */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <div className="flex gap-1">
+                  {[
+                    { id: 'component', label: generatedStarter.componentFileName },
+                    { id: 'manifest', label: 'manifest.ts' },
+                    { id: 'superapp', label: 'superAppStarter.config.ts' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveCodePreview(tab.id as any)}
+                      style={{
+                        backgroundColor:
+                          activeCodePreview === tab.id ? themeTokens.accentMuted : themeTokens.bgSurface,
+                        color:
+                          activeCodePreview === tab.id ? themeTokens.accentPrimary : themeTokens.textSecondary,
+                        borderColor:
+                          activeCodePreview === tab.id ? themeTokens.borderAccent : themeTokens.borderDefault,
+                      }}
+                      className="px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold transition"
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyCode(
+                        activeCodePreview === 'component'
+                          ? generatedStarter.componentCode
+                          : activeCodePreview === 'manifest'
+                          ? generatedStarter.manifestCode
+                          : JSON.stringify(SUPER_APP_STARTER_CONFIG, null, 2)
+                      )
+                    }
+                    style={{
+                      backgroundColor: themeTokens.bgSurface,
+                      borderColor: themeTokens.borderDefault,
+                      color: themeTokens.textPrimary,
+                    }}
+                    className="px-2.5 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDownloadStarterFile(
+                        activeCodePreview === 'component'
+                          ? generatedStarter.componentFileName
+                          : activeCodePreview === 'manifest'
+                          ? 'manifest.ts'
+                          : 'superAppStarter.config.json',
+                        activeCodePreview === 'component'
+                          ? generatedStarter.componentCode
+                          : activeCodePreview === 'manifest'
+                          ? generatedStarter.manifestCode
+                          : JSON.stringify(SUPER_APP_STARTER_CONFIG, null, 2)
+                      )
+                    }
+                    style={{
+                      backgroundColor: themeTokens.bgSurface,
+                      borderColor: themeTokens.borderDefault,
+                      color: themeTokens.textPrimary,
+                    }}
+                    className="px-2.5 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Save</span>
+                  </button>
+                </div>
+              </div>
+
+              <pre className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 font-mono text-[10px] overflow-x-auto max-h-60 text-cyan-300 leading-relaxed">
+                {activeCodePreview === 'component'
+                  ? generatedStarter.componentCode
+                  : activeCodePreview === 'manifest'
+                  ? generatedStarter.manifestCode
+                  : JSON.stringify(SUPER_APP_STARTER_CONFIG, null, 2)}
+              </pre>
+            </div>
+
+            <button
+              type="button"
+              disabled={isScaffolding}
+              onClick={handleScaffoldAndLaunch}
+              style={{
+                backgroundColor: themeTokens.accentPrimary,
+                color: themeTokens.accentContrast,
+                boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
+              }}
+              className="w-full py-3 rounded-2xl text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition ios-active"
+            >
+              <Rocket className="w-4 h-4" />
+              <span>
+                {isScaffolding ? 'Scaffolding Mini App...' : '1-Click Scaffold & Launch in Super App'}
+              </span>
+            </button>
+          </div>
         </div>
       ) : (
         /* DEVELOPER GUIDE & DOCUMENTATION SECTION (2.4) */

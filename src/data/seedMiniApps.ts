@@ -1,6 +1,82 @@
 import { MiniAppManifest, MiniAppReview } from '../types/miniapp';
+import { STARTER_MINI_APP_MANIFEST } from '../templates/miniAppStarter';
 
 export const INITIAL_MINI_APPS: MiniAppManifest[] = [
+  STARTER_MINI_APP_MANIFEST,
+  {
+    id: 'fintrack-budget',
+    name: 'FinTrack Budget & Wealth',
+    shortName: 'FinTrack',
+    version: '1.8.0',
+    category: 'finance',
+    icon: 'PieChart',
+    iconBg: '#0d9488',
+    gradient: 'from-teal-500 to-emerald-600',
+    summary: 'Personal finance tracker, monthly budgets, category analytics & savings goals vault',
+    description:
+      'Complete personal finance & expense tracking mini app. Monitor monthly cashflow, inspect category spending breakdowns, set budget threshold alerts, and fund savings goals directly from your shared Super App Wallet.',
+    author: {
+      name: 'OmniFin Labs',
+      email: 'fintech@omnimini.dev',
+      verified: true,
+      org: 'OmniMini Core',
+    },
+    rating: 4.9,
+    reviewCount: 845,
+    downloadCount: 15200,
+    sizeKb: 112,
+    permissions: ['storage', 'auth', 'notifications', 'biometrics'],
+    status: 'published',
+    isBuiltin: true,
+    releaseNotes: 'Added category analytics breakdown, savings goals vault, and Super App Wallet deduction sync.',
+    updatedAt: '2026-10-18',
+    screenshots: [
+      'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80',
+    ],
+    pluggableSettingsSchema: [
+      {
+        id: 'monthlyBudgetLimit',
+        label: 'Monthly Budget Target ($)',
+        description: 'Maximum monthly expense threshold before showing budget alerts',
+        type: 'slider',
+        min: 500,
+        max: 10000,
+        step: 100,
+        defaultValue: 2500,
+      },
+      {
+        id: 'alertThresholdPercent',
+        label: 'Budget Warning Threshold (%)',
+        description: 'Percentage of monthly budget that triggers an amber spending alert',
+        type: 'slider',
+        min: 50,
+        max: 100,
+        step: 5,
+        defaultValue: 80,
+      },
+      {
+        id: 'currencySymbol',
+        label: 'Currency Symbol',
+        description: 'Currency prefix used across ledger, analytics, and goals',
+        type: 'select',
+        options: [
+          { label: 'USD ($)', value: '$' },
+          { label: 'EUR (€)', value: '€' },
+          { label: 'GBP (£)', value: '£' },
+          { label: 'JPY (¥)', value: '¥' },
+        ],
+        defaultValue: '$',
+      },
+      {
+        id: 'privacyMaskDefault',
+        label: 'Auto-Mask Balances on Pause',
+        description: 'Automatically hide dollar amounts when FinTrack enters onPause state',
+        type: 'switch',
+        defaultValue: false,
+      },
+    ],
+    entrypoint: 'FinTrackApp',
+  },
   {
     id: 'paypulse-wallet',
     name: 'PayPulse Wallet',

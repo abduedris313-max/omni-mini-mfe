@@ -13,6 +13,7 @@ import {
   themeEventEmitter,
 } from '../theme/themeEngine';
 import { ThemeTokens } from '../theme/types';
+import { SUPER_APP_STARTER_CONFIG } from '../config/superAppStarter.config';
 
 interface ToastItem {
   id: string;
@@ -55,6 +56,8 @@ interface SuperAppContextValue {
   isAppInstalled: (appId: string) => boolean;
 
   activeMiniAppId: string | null;
+  recentAppIds: string[];
+  clearRecentApps: () => void;
   openMiniApp: (appId: string) => void;
   closeMiniApp: () => void;
 
@@ -96,15 +99,20 @@ interface SuperAppContextValue {
 const SuperAppContext = createContext<SuperAppContextValue | undefined>(undefined);
 
 const DEFAULT_SETTINGS: SuperAppSettings = {
-  theme: 'dark',
-  accentColor: 'blue',
-  hapticsEnabled: true,
-  soundEffects: true,
-  biometricAuth: true,
-  deviceBezel: false, // Default edge-to-edge with toggle to iPhone frame
-  showStatusBar: true,
+  ...SUPER_APP_STARTER_CONFIG.defaultSettings,
   developerMode: true,
   pluggableAppSettings: {
+    'miniapp-starter-template': {
+      welcomeBannerText: 'Build Fast with OmniMini SDK',
+      enableDebugBanner: true,
+      sampleCheckoutAmount: 5,
+    },
+    'fintrack-budget': {
+      monthlyBudgetLimit: 2500,
+      alertThresholdPercent: 80,
+      currencySymbol: '$',
+      privacyMaskDefault: false,
+    },
     'paypulse-wallet': {
       requireBiometrics: true,
       dailySpendingLimit: 1500,
@@ -235,8 +243,8 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     } catch (e) {
       console.warn('Failed loading installed apps', e);
     }
-    // Default installed apps for instant testing
-    return ['paypulse-wallet', 'urbanride-transit', 'foodbite-express', 'fitsync-health', 'noteflow-editor', 'codecraft-scratchpad'];
+    // Default installed apps from Super App Starter Config
+    return SUPER_APP_STARTER_CONFIG.preinstalledMiniAppIds;
   });
 
   const installApp = async (appId: string) => {
@@ -262,8 +270,30 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const isAppInstalled = (appId: string) => installedAppIds.includes(appId);
 
+  const [recentAppIds, setRecentAppIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('omnimini_recent_apps_v2');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Failed loading recent apps', e);
+    }
+    return ['paypulse-wallet', 'foodbite-express', 'urbanride-transit'];
+  });
+
+  const clearRecentApps = () => {
+    setRecentAppIds([]);
+    localStorage.setItem('omnimini_recent_apps_v2', JSON.stringify([]));
+    showToast('Recent launch history cleared', 'info');
+    hapticFeedback('light');
+  };
+
   const openMiniApp = (appId: string) => {
     setActiveMiniAppId(appId);
+    setRecentAppIds((prev) => {
+      const next = [appId, ...prev.filter((id) => id !== appId)].slice(0, 12);
+      localStorage.setItem('omnimini_recent_apps_v2', JSON.stringify(next));
+      return next;
+    });
     hapticFeedback('light');
   };
 
@@ -653,6 +683,8 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         uninstallApp,
         isAppInstalled,
         activeMiniAppId,
+        recentAppIds,
+        clearRecentApps,
         openMiniApp,
         closeMiniApp,
         walletBalance,

@@ -9,6 +9,8 @@ import { FoodBiteApp } from './FoodBiteExpress';
 import { FitSyncApp } from './FitSyncHealth';
 import { NoteFlowApp } from './NoteFlowEditor';
 import { CodeCraftApp } from './CodeCraftScratchpad';
+import { FinTrackApp } from './FinTrackBudget';
+import { StarterMiniApp } from '../templates/miniAppStarter';
 import {
   ChevronLeft,
   MoreHorizontal,
@@ -59,6 +61,10 @@ export const MiniAppContainer: React.FC = () => {
 
   const renderMiniAppContent = () => {
     switch (app.id) {
+      case 'miniapp-starter-template':
+        return <StarterMiniApp key={reloadKey} sdk={sdk} />;
+      case 'fintrack-budget':
+        return <FinTrackApp key={reloadKey} sdk={sdk} />;
       case 'paypulse-wallet':
         return <PayPulseApp key={reloadKey} sdk={sdk} />;
       case 'urbanride-transit':

@@ -127,6 +127,14 @@ export interface MiniAppBridgeSDK {
     hasPermission: (perm: MiniAppPermission) => boolean;
     requestPermission: (perm: MiniAppPermission) => Promise<boolean>;
   };
+  onStart: (callback: () => void) => () => void;
+  onPause: (callback: () => void) => () => void;
+  lifecycle: {
+    onStart: (callback: () => void) => () => void;
+    onPause: (callback: () => void) => () => void;
+    triggerStart: () => void;
+    triggerPause: () => void;
+  };
 }
 
 export type NavigationTab = 'home' | 'store' | 'developer' | 'wallet' | 'settings';

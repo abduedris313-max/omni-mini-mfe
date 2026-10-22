@@ -1,6 +1,16 @@
 import { MiniAppBridgeSDK, MiniAppPermission } from '../types/miniapp';
 import { resolveMiniAppTheme } from '../theme/themeEngine';
 
+const startListenersByApp: Record<string, Set<() => void>> = {};
+const pauseListenersByApp: Record<string, Set<() => void>> = {};
+
+function getListenerSet(store: Record<string, Set<() => void>>, appId: string): Set<() => void> {
+  if (!store[appId]) {
+    store[appId] = new Set();
+  }
+  return store[appId];
+}
+
 export function createMiniAppSDK(
   appId: string,
   context: {
@@ -24,6 +34,68 @@ export function createMiniAppSDK(
     undefined,
     context.updatePluggableSetting
   );
+
+  const registerOnStart = (callback: () => void) => {
+    const set = getListenerSet(startListenersByApp, appId);
+    set.add(callback);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        callback();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Fire initial onStart asynchronously upon registration
+    const timer = setTimeout(() => {
+      callback();
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      set.delete(callback);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  };
+
+  const registerOnPause = (callback: () => void) => {
+    const set = getListenerSet(pauseListenersByApp, appId);
+    set.add(callback);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        callback();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      set.delete(callback);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  };
+
+  const triggerStart = () => {
+    const set = getListenerSet(startListenersByApp, appId);
+    set.forEach((cb) => {
+      try {
+        cb();
+      } catch (err) {
+        console.warn('onStart listener error', err);
+      }
+    });
+  };
+
+  const triggerPause = () => {
+    const set = getListenerSet(pauseListenersByApp, appId);
+    set.forEach((cb) => {
+      try {
+        cb();
+      } catch (err) {
+        console.warn('onPause listener error', err);
+      }
+    });
+  };
 
   return {
     auth: {
@@ -71,12 +143,14 @@ export function createMiniAppSDK(
 
     navigation: {
       closeMiniApp: () => {
+        triggerPause();
         context.closeMiniApp();
       },
       setHeaderTitle: (_title: string) => {
         // Can adjust dynamic header
       },
       openMiniApp: (targetAppId: string) => {
+        triggerPause();
         context.openMiniApp(targetAppId);
       },
     },
@@ -112,6 +186,15 @@ export function createMiniAppSDK(
       requestPermission: async (perm: MiniAppPermission) => {
         return context.requestPermission(appId, perm);
       },
+    },
+
+    onStart: registerOnStart,
+    onPause: registerOnPause,
+    lifecycle: {
+      onStart: registerOnStart,
+      onPause: registerOnPause,
+      triggerStart,
+      triggerPause,
     },
   };
 }

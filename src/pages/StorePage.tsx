@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSuperApp } from '../context/SuperAppContext';
-import { MiniAppManifest, MiniAppReview } from '../types/miniapp';
+import { MiniAppCategory, MiniAppManifest, MiniAppReview } from '../types/miniapp';
 import { repositoryService } from '../services/repositoryService';
 import {
   Search,
@@ -10,12 +10,49 @@ import {
   Sliders,
   Send,
   ArrowUpDown,
+  LayoutGrid,
+  Clock,
+  Wallet,
+  Train,
+  Utensils,
+  HeartPulse,
+  Briefcase,
+  Wrench,
+  Code2,
+  QrCode,
+  Camera,
+  CameraOff,
+  Sparkles,
+  Trash2,
+  CheckCircle2,
 } from 'lucide-react';
+
+type FilterCategory = 'all' | 'recent' | MiniAppCategory;
+
+interface CategoryFilterOption {
+  id: FilterCategory;
+  label: string;
+  icon: React.FC<{ className?: string }>;
+}
+
+const CATEGORY_OPTIONS: CategoryFilterOption[] = [
+  { id: 'all', label: 'All Apps', icon: LayoutGrid },
+  { id: 'recent', label: 'Recent', icon: Clock },
+  { id: 'finance', label: 'Finance', icon: Wallet },
+  { id: 'transport', label: 'Transit', icon: Train },
+  { id: 'food', label: 'Food & Drink', icon: Utensils },
+  { id: 'health', label: 'Health', icon: HeartPulse },
+  { id: 'productivity', label: 'Productivity', icon: Briefcase },
+  { id: 'utilities', label: 'Utilities', icon: Wrench },
+  { id: 'developer', label: 'Developer', icon: Code2 },
+];
 
 export const StorePage: React.FC = () => {
   const {
     availableApps,
     installedAppIds,
+    recentAppIds,
+    clearRecentApps,
     installApp,
     openMiniApp,
     user,
@@ -25,7 +62,7 @@ export const StorePage: React.FC = () => {
     themeTokens,
   } = useSuperApp();
 
-  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [activeCategory, setActiveCategory] = useState<FilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'downloads' | 'rating' | 'recent'>('downloads');
   const [selectedApp, setSelectedApp] = useState<MiniAppManifest | null>(null);
@@ -33,24 +70,122 @@ export const StorePage: React.FC = () => {
   const [, setIsLoadingDetails] = useState(false);
   const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
 
+  // QR Code Scanner state
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [qrInputCode, setQrInputCode] = useState('');
+  const [scannedApp, setScannedApp] = useState<MiniAppManifest | null>(null);
+  const [isScanningAnimation, setIsScanningAnimation] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
   // Review form state
   const [userRating, setUserRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  const categories = [
-    { id: 'all', label: 'All' },
-    { id: 'finance', label: 'Finance' },
-    { id: 'transport', label: 'Transit' },
-    { id: 'food', label: 'Food & Drink' },
-    { id: 'health', label: 'Health' },
-    { id: 'productivity', label: 'Productivity' },
-    { id: 'developer', label: 'Developer' },
-  ];
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  const startCameraStream = async () => {
+    setCameraError(null);
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError('Camera API unavailable in this browser context. Use Quick-Scan below.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
+      streamRef.current = stream;
+      setIsCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch {
+      setCameraError('Camera permission declined or no camera found. Use Quick-Scan or enter a QR code below.');
+      setIsCameraActive(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isScannerOpen) {
+      stopCameraStream();
+      setScannedApp(null);
+      setQrInputCode('');
+      setCameraError(null);
+    }
+    return () => {
+      stopCameraStream();
+    };
+  }, [isScannerOpen]);
+
+  const handleResolveQrPayload = (rawPayload: string) => {
+    const cleaned = rawPayload
+      .trim()
+      .toLowerCase()
+      .replace(/^omnimini:\/\/app\//i, '')
+      .replace(/^https?:\/\/[^/]+\/app\//i, '');
+
+    if (!cleaned) {
+      showToast('Please enter or scan a valid Mini App QR code', 'warning');
+      return;
+    }
+
+    setIsScanningAnimation(true);
+    hapticFeedback('medium');
+
+    setTimeout(() => {
+      setIsScanningAnimation(false);
+      const matched = availableApps.find(
+        (a) =>
+          a.id.toLowerCase() === cleaned ||
+          a.shortName.toLowerCase() === cleaned ||
+          a.name.toLowerCase() === cleaned
+      );
+
+      if (matched) {
+        setScannedApp(matched);
+        hapticFeedback('success');
+        showToast(`QR Decoded: ${matched.name}`, 'success');
+      } else {
+        showToast(`No mini app found matching code "${rawPayload}"`, 'error');
+      }
+    }, 450);
+  };
+
+  const handleAddOrLaunchScannedApp = async (app: MiniAppManifest) => {
+    hapticFeedback('medium');
+    const alreadyInstalled = installedAppIds.includes(app.id);
+    if (!alreadyInstalled) {
+      await installApp(app.id);
+    }
+    setIsScannerOpen(false);
+    openMiniApp(app.id);
+  };
+
+  const getCategoryCount = (catId: FilterCategory): number => {
+    if (catId === 'all') return availableApps.length;
+    if (catId === 'recent') {
+      return availableApps.filter((app) => recentAppIds.includes(app.id)).length;
+    }
+    return availableApps.filter((app) => app.category === catId).length;
+  };
 
   const filteredApps = availableApps
     .filter((app) => {
-      const matchesCategory = activeCategory === 'all' || app.category === activeCategory;
+      const matchesCategory =
+        activeCategory === 'all'
+          ? true
+          : activeCategory === 'recent'
+          ? recentAppIds.includes(app.id)
+          : app.category === activeCategory;
       const matchesSearch =
         !searchQuery ||
         app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -60,6 +195,9 @@ export const StorePage: React.FC = () => {
       return matchesCategory && matchesSearch;
     })
     .sort((a, b) => {
+      if (activeCategory === 'recent') {
+        return recentAppIds.indexOf(a.id) - recentAppIds.indexOf(b.id);
+      }
       if (sortBy === 'downloads') {
         return (b.downloadCount || 0) - (a.downloadCount || 0);
       } else if (sortBy === 'rating') {
@@ -69,6 +207,9 @@ export const StorePage: React.FC = () => {
       }
       return 0;
     });
+
+  const activeCategoryLabel =
+    CATEGORY_OPTIONS.find((c) => c.id === activeCategory)?.label || 'All Apps';
 
   const handleInstallClick = async (appId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -129,20 +270,83 @@ export const StorePage: React.FC = () => {
       className="p-4 space-y-5 pb-28 transition-colors duration-200"
       style={{ color: themeTokens.textPrimary }}
     >
-      {/* Store Header */}
-      <div className="space-y-1">
-        <span
-          className="text-[11px] font-bold uppercase tracking-widest transition-colors"
-          style={{ color: themeTokens.accentPrimary }}
+      {/* Store Header with QR Scanner Action */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="space-y-1">
+          <span
+            className="text-[11px] font-bold uppercase tracking-widest transition-colors"
+            style={{ color: themeTokens.accentPrimary }}
+          >
+            Mini App Registry
+          </span>
+          <h1
+            className="text-2xl font-black tracking-tight"
+            style={{ color: themeTokens.textPrimary }}
+          >
+            App Store
+          </h1>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setIsScannerOpen(true);
+            hapticFeedback('light');
+          }}
+          style={{
+            backgroundColor: themeTokens.accentMuted,
+            borderColor: themeTokens.borderAccent,
+            color: themeTokens.accentPrimary,
+          }}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border text-xs font-bold transition ios-active shrink-0"
         >
-          Mini App Registry
-        </span>
-        <h1
-          className="text-2xl font-black tracking-tight"
-          style={{ color: themeTokens.textPrimary }}
-        >
-          App Store
-        </h1>
+          <QrCode className="w-4 h-4" />
+          <span>Scan QR</span>
+        </button>
+      </div>
+
+      {/* Horizontal Scrollable Category Filter Bar at Top */}
+      <div
+        role="tablist"
+        aria-label="Mini App Categories"
+        className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 -mx-4 px-4"
+      >
+        {CATEGORY_OPTIONS.map((cat) => {
+          const isActive = activeCategory === cat.id;
+          const IconComponent = cat.icon;
+          const count = getCategoryCount(cat.id);
+
+          return (
+            <button
+              key={cat.id}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                setActiveCategory(cat.id);
+                hapticFeedback('light');
+              }}
+              style={{
+                backgroundColor: isActive ? themeTokens.accentPrimary : themeTokens.bgSurface,
+                borderColor: isActive ? 'transparent' : themeTokens.borderDefault,
+                color: isActive ? themeTokens.accentContrast : themeTokens.textSecondary,
+                boxShadow: isActive ? `0 4px 12px ${themeTokens.accentGlow}` : 'none',
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap border transition ios-active shrink-0"
+            >
+              <IconComponent className="w-3.5 h-3.5 shrink-0" />
+              <span>{cat.label}</span>
+              <span
+                style={{
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.22)' : themeTokens.bgCard,
+                  color: isActive ? themeTokens.accentContrast : themeTokens.textMuted,
+                }}
+                className="px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none"
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Search & Sort Controls */}
@@ -162,8 +366,19 @@ export const StorePage: React.FC = () => {
               borderColor: themeTokens.borderDefault,
               color: themeTokens.textPrimary,
             }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl border text-xs placeholder-slate-400 focus:outline-none transition"
+            className="w-full pl-10 pr-8 py-2.5 rounded-2xl border text-xs placeholder-slate-400 focus:outline-none transition"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:opacity-80"
+              style={{ color: themeTokens.textMuted }}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
         <div className="relative shrink-0">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -172,7 +387,7 @@ export const StorePage: React.FC = () => {
           <select
             value={sortBy}
             onChange={(e) => {
-              setSortBy(e.target.value as any);
+              setSortBy(e.target.value as 'downloads' | 'rating' | 'recent');
               hapticFeedback('light');
             }}
             style={{
@@ -187,31 +402,6 @@ export const StorePage: React.FC = () => {
             <option value="recent">Recently Added</option>
           </select>
         </div>
-      </div>
-
-      {/* Category Filter Horizontal Scroll */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-        {categories.map((cat) => {
-          const isActive = activeCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => {
-                setActiveCategory(cat.id);
-                hapticFeedback('light');
-              }}
-              style={{
-                backgroundColor: isActive ? themeTokens.accentPrimary : themeTokens.bgSurface,
-                borderColor: isActive ? 'transparent' : themeTokens.borderDefault,
-                color: isActive ? themeTokens.accentContrast : themeTokens.textSecondary,
-                boxShadow: isActive ? `0 2px 8px ${themeTokens.accentGlow}` : 'none',
-              }}
-              className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition"
-            >
-              {cat.label}
-            </button>
-          );
-        })}
       </div>
 
       {/* Featured Hero Banner */}
@@ -252,14 +442,30 @@ export const StorePage: React.FC = () => {
             className="text-xs font-bold uppercase tracking-wider"
             style={{ color: themeTokens.textMuted }}
           >
-            {activeCategory === 'all' ? 'Discover All Mini Apps' : `${activeCategory} Collection`}
+            {activeCategory === 'all'
+              ? 'Discover All Mini Apps'
+              : activeCategory === 'recent'
+              ? 'Recently Launched Mini Apps'
+              : `${activeCategoryLabel} Collection`}
           </span>
-          <span
-            className="text-[10px] font-mono"
-            style={{ color: themeTokens.textMuted }}
-          >
-            {filteredApps.length} available
-          </span>
+          <div className="flex items-center gap-2">
+            {activeCategory === 'recent' && recentAppIds.length > 0 && (
+              <button
+                type="button"
+                onClick={clearRecentApps}
+                className="flex items-center gap-1 text-[10px] font-bold text-rose-400 hover:opacity-80 transition"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Clear History</span>
+              </button>
+            )}
+            <span
+              className="text-[10px] font-mono"
+              style={{ color: themeTokens.textMuted }}
+            >
+              {filteredApps.length} available
+            </span>
+          </div>
         </div>
 
         <div className="space-y-2.5">
@@ -358,6 +564,44 @@ export const StorePage: React.FC = () => {
               </div>
             );
           })}
+
+          {filteredApps.length === 0 && (
+            <div
+              style={{
+                backgroundColor: themeTokens.bgCard,
+                borderColor: themeTokens.borderDefault,
+              }}
+              className="p-6 rounded-2xl border text-center space-y-2.5"
+            >
+              <p
+                className="text-xs font-semibold"
+                style={{ color: themeTokens.textPrimary }}
+              >
+                No mini apps found in {activeCategoryLabel}
+              </p>
+              <p
+                className="text-[11px]"
+                style={{ color: themeTokens.textSecondary }}
+              >
+                Try selecting another category or clearing your search query.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCategory('all');
+                  setSearchQuery('');
+                  hapticFeedback('light');
+                }}
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                }}
+                className="px-4 py-1.5 rounded-xl text-xs font-bold transition ios-active"
+              >
+                Reset Filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -640,6 +884,282 @@ export const StorePage: React.FC = () => {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Scanner Modal */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div
+            style={{
+              backgroundColor: themeTokens.bgCard,
+              borderColor: themeTokens.borderDefault,
+              color: themeTokens.textPrimary,
+            }}
+            className="w-full max-w-md max-h-[90vh] rounded-t-3xl sm:rounded-3xl border flex flex-col overflow-hidden shadow-2xl relative animate-in slide-in-from-bottom duration-200"
+          >
+            {/* Modal Header */}
+            <div
+              className="p-4 border-b flex items-center justify-between shrink-0"
+              style={{ borderColor: themeTokens.borderDefault }}
+            >
+              <div className="flex items-center gap-2">
+                <QrCode className="w-4 h-4" style={{ color: themeTokens.accentPrimary }} />
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Mini App QR Scanner
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen(false)}
+                style={{
+                  backgroundColor: themeTokens.bgSurface,
+                  color: themeTokens.textSecondary,
+                }}
+                className="p-1.5 rounded-full hover:opacity-80 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar">
+              {/* Optical Viewfinder */}
+              <div
+                style={{
+                  backgroundColor: '#050811',
+                  borderColor: themeTokens.borderDefault,
+                }}
+                className="relative w-full h-52 rounded-2xl border overflow-hidden flex flex-col items-center justify-center"
+              >
+                {isCameraActive ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center px-6 space-y-2 z-10">
+                    <div
+                      className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center"
+                      style={{
+                        backgroundColor: themeTokens.accentMuted,
+                        color: themeTokens.accentPrimary,
+                      }}
+                    >
+                      <QrCode className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs font-semibold text-white">
+                      Point camera at an OmniMini QR Code
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Automatically detects <span className="font-mono">omnimini://app/*</span> payloads to install or launch mini apps.
+                    </p>
+                  </div>
+                )}
+
+                {/* Corner Brackets & Animated Laser Reticle */}
+                <div className="absolute inset-6 pointer-events-none border border-white/15 rounded-2xl">
+                  <div
+                    className="absolute -top-0.5 -left-0.5 w-5 h-5 border-t-2 border-l-2 rounded-tl-lg"
+                    style={{ borderColor: themeTokens.accentPrimary }}
+                  />
+                  <div
+                    className="absolute -top-0.5 -right-0.5 w-5 h-5 border-t-2 border-r-2 rounded-tr-lg"
+                    style={{ borderColor: themeTokens.accentPrimary }}
+                  />
+                  <div
+                    className="absolute -bottom-0.5 -left-0.5 w-5 h-5 border-b-2 border-l-2 rounded-bl-lg"
+                    style={{ borderColor: themeTokens.accentPrimary }}
+                  />
+                  <div
+                    className="absolute -bottom-0.5 -right-0.5 w-5 h-5 border-b-2 border-r-2 rounded-br-lg"
+                    style={{ borderColor: themeTokens.accentPrimary }}
+                  />
+                  {(isCameraActive || isScanningAnimation) && (
+                    <div
+                      style={{ backgroundColor: themeTokens.accentPrimary }}
+                      className="w-full h-0.5 shadow-lg animate-pulse mt-20"
+                    />
+                  )}
+                </div>
+
+                {/* Camera Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => (isCameraActive ? stopCameraStream() : startCameraStream())}
+                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-black/70 text-white border border-white/15 backdrop-blur-md transition ios-active"
+                >
+                  {isCameraActive ? (
+                    <>
+                      <CameraOff className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Stop Camera</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Enable Camera</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {cameraError && (
+                <p className="text-[11px] text-amber-400 px-1">{cameraError}</p>
+              )}
+
+              {/* Scanned App Result Card */}
+              {scannedApp && (
+                <div
+                  style={{
+                    backgroundColor: themeTokens.bgSurface,
+                    borderColor: themeTokens.accentPrimary,
+                  }}
+                  className="p-3.5 rounded-2xl border space-y-3 animate-in fade-in duration-150"
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                      style={{ color: themeTokens.accentPrimary }}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>QR Code Verified</span>
+                    </span>
+                    <span className="text-[10px] font-mono" style={{ color: themeTokens.textMuted }}>
+                      v{scannedApp.version}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-sm shrink-0"
+                      style={{ backgroundColor: scannedApp.iconBg }}
+                    >
+                      {scannedApp.shortName.slice(0, 2)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-xs font-bold truncate" style={{ color: themeTokens.textPrimary }}>
+                        {scannedApp.name}
+                      </h4>
+                      <p className="text-[11px] truncate" style={{ color: themeTokens.textSecondary }}>
+                        {scannedApp.summary}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddOrLaunchScannedApp(scannedApp)}
+                    style={{
+                      backgroundColor: themeTokens.accentPrimary,
+                      color: themeTokens.accentContrast,
+                      boxShadow: `0 4px 12px ${themeTokens.accentGlow}`,
+                    }}
+                    className="w-full py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ios-active"
+                  >
+                    {installedAppIds.includes(scannedApp.id)
+                      ? 'Launch Mini App Now'
+                      : 'Add & Launch Mini App'}
+                  </button>
+                </div>
+              )}
+
+              {/* Manual QR Code / Deep-Link Entry */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleResolveQrPayload(qrInputCode);
+                }}
+                className="space-y-1.5"
+              >
+                <label
+                  className="text-[11px] font-bold uppercase tracking-wider block"
+                  style={{ color: themeTokens.textMuted }}
+                >
+                  Enter QR Code Payload or App ID
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={qrInputCode}
+                    onChange={(e) => setQrInputCode(e.target.value)}
+                    placeholder="e.g. omnimini://app/paypulse-wallet"
+                    style={{
+                      backgroundColor: themeTokens.bgInput,
+                      borderColor: themeTokens.borderDefault,
+                      color: themeTokens.textPrimary,
+                    }}
+                    className="flex-1 px-3 py-2 rounded-xl border text-xs font-mono focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      backgroundColor: themeTokens.accentPrimary,
+                      color: themeTokens.accentContrast,
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold transition ios-active shrink-0"
+                  >
+                    Decode
+                  </button>
+                </div>
+              </form>
+
+              {/* Quick-Scan Demo QR Codes for Instant Testing */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1"
+                    style={{ color: themeTokens.textMuted }}
+                  >
+                    <Sparkles className="w-3 h-3" style={{ color: themeTokens.accentPrimary }} />
+                    <span>Tap a Sample QR Code to Scan</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {availableApps.map((app) => {
+                    const isInstalled = installedAppIds.includes(app.id);
+                    return (
+                      <button
+                        key={app.id}
+                        type="button"
+                        onClick={() => handleResolveQrPayload(`omnimini://app/${app.id}`)}
+                        style={{
+                          backgroundColor: themeTokens.bgSurface,
+                          borderColor:
+                            scannedApp?.id === app.id
+                              ? themeTokens.accentPrimary
+                              : themeTokens.borderDefault,
+                        }}
+                        className="p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition ios-active"
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0"
+                          style={{ backgroundColor: app.iconBg }}
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="text-[11px] font-bold truncate"
+                            style={{ color: themeTokens.textPrimary }}
+                          >
+                            {app.shortName}
+                          </div>
+                          <div
+                            className="text-[9px] font-mono truncate"
+                            style={{ color: themeTokens.textMuted }}
+                          >
+                            {isInstalled ? 'Installed • Launch' : 'Scan to Add'}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
