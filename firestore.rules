@@ -320,9 +320,20 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/users/$(userId)) &&
           get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
 
-        // Terminal State Lock: Completed wallet ledger entries are strictly immutable
-        allow update: if false;
-        allow delete: if false;
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(transactionId) &&
+          isOwner(userId) &&
+          isValidWalletTransaction(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'type', 'description', 'timestamp']);
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(transactionId) &&
+          (isOwner(userId) || isAdmin());
       }
     }
 

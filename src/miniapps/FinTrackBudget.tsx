@@ -27,6 +27,7 @@ import {
   Play,
   Pause,
   Check,
+  Pencil,
 } from 'lucide-react';
 
 export type CurrencyCode = 'ETB' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'KES';
@@ -82,6 +83,7 @@ export interface FinTrackEntry {
   category: FinTrackCategory;
   accountId?: string;
   accountName?: string;
+  transferToAccountId?: string;
   date: string;
   settledViaWallet?: boolean;
 }
@@ -331,9 +333,10 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   });
   const [accountFilter, setAccountFilter] = useState<'all' | 'bank' | 'wallet'>('all');
   const [showAddAccountForm, setShowAddAccountForm] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [showTransferForm, setShowTransferForm] = useState(false);
 
-  // New Account Form
+  // New / Edit Account Form
   const [accName, setAccName] = useState('');
   const [accInstitution, setAccInstitution] = useState('Commercial Bank of Ethiopia (CBE)');
   const [accType, setAccType] = useState<'bank' | 'wallet'>('bank');
@@ -366,15 +369,24 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   });
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
   const [showAddTxForm, setShowAddTxForm] = useState(false);
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
 
-  // New Transaction Form
+  // New / Edit Transaction Form
   const [txTitle, setTxTitle] = useState('');
   const [txAmount, setTxAmount] = useState('');
   const [txCurrency, setTxCurrency] = useState<CurrencyCode>('ETB');
   const [txType, setTxType] = useState<'expense' | 'income'>('expense');
   const [txCategory, setTxCategory] = useState<FinTrackCategory>('Dining');
-  const [txAccountId, setTxAccountId] = useState<string>('');
+  const [txAccountId, setTxAccountId] = useState<string>(() => accounts[0]?.id || '');
+  const [txDate, setTxDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [chargeSuperAppWallet, setChargeSuperAppWallet] = useState(false);
+
+  // Automatically default txAccountId to the primary account when accounts exist
+  useEffect(() => {
+    if (!editingTxId && !txAccountId && accounts.length > 0) {
+      setTxAccountId(accounts[0].id);
+    }
+  }, [accounts, editingTxId, txAccountId]);
 
   // 5. Loan Providers (P2P & B2C) and Loan Tracking State
   const [loanProviders, setLoanProviders] = useState<LoanProvider[]>(() => {
@@ -648,6 +660,49 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     [baseCurrency, hideBalances]
   );
 
+  // Atomically apply one or more currency-aware balance deltas to accounts and auto-sync to SuperApp Wallet
+  const applyAccountBalanceAdjustments = useCallback(
+    (
+      adjustments: Array<{
+        accountId?: string;
+        deltaAmount: number;
+        deltaCurrency: CurrencyCode;
+      }>
+    ) => {
+      const valid = adjustments.filter(
+        (adj) =>
+          adj.accountId &&
+          adj.accountId !== 'NONE' &&
+          Number.isFinite(adj.deltaAmount) &&
+          Math.abs(adj.deltaAmount) > 0
+      );
+      if (valid.length === 0) return;
+
+      setAccounts((prev) => {
+        const next = prev.map((acc) => {
+          const matching = valid.filter((adj) => adj.accountId === acc.id);
+          if (matching.length === 0) return acc;
+          const totalDeltaInAccCurr = matching.reduce(
+            (sum, adj) => sum + convertAmount(adj.deltaAmount, adj.deltaCurrency, acc.currency),
+            0
+          );
+          return {
+            ...acc,
+            balance: Number((acc.balance + totalDeltaInAccCurr).toFixed(2)),
+            updatedAt: new Date().toISOString().slice(0, 10),
+          };
+        });
+        if (autoSyncSuperApp && next.some((a) => a.shareWithSuperApp)) {
+          setTimeout(() => {
+            pushSharedBalanceToSuperApp(next, true);
+          }, 0);
+        }
+        return next;
+      });
+    },
+    [autoSyncSuperApp, convertAmount, pushSharedBalanceToSuperApp]
+  );
+
   // Adjust a specific Bank or Wallet account's balance and auto-sync to SuperApp Wallet if enabled
   const adjustAccountBalance = useCallback(
     (accountId: string, deltaInAccountCurrency: number) => {
@@ -756,16 +811,82 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handlers: Multi-Account Management
+  // Handlers: Multi-Account Management (Create & Update)
+  const startEditAccount = (acc: FinTrackAccount) => {
+    setEditingAccountId(acc.id);
+    setAccName(acc.name);
+    setAccInstitution(acc.institution);
+    setAccType(acc.type);
+    setAccNumber(acc.accountNumber);
+    setAccCurrency(acc.currency);
+    setAccBalance(String(acc.balance));
+    setAccShareSuperApp(acc.shareWithSuperApp);
+    setShowTransferForm(false);
+    setShowAddAccountForm(true);
+    sdk.ui.hapticFeedback('light');
+  };
+
+  const resetAccountForm = () => {
+    setEditingAccountId(null);
+    setAccName('');
+    setAccBalance('');
+    setAccNumber('');
+    setShowAddAccountForm(false);
+  };
+
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
     const initialBal = parseFloat(accBalance || '0');
     if (!accName.trim() || !Number.isFinite(initialBal)) {
-      sdk.ui.showToast('Enter an account name and valid opening balance', 'warning');
+      sdk.ui.showToast('Enter an account name and valid balance', 'warning');
       return;
     }
 
     const preset = INSTITUTION_PRESETS.find((p) => p.name === accInstitution);
+
+    if (editingAccountId) {
+      const nextAccounts = accounts.map((acc) => {
+        if (acc.id !== editingAccountId) return acc;
+        return {
+          ...acc,
+          name: accName.trim(),
+          institution: accInstitution,
+          type: accType,
+          accountNumber:
+            accNumber.trim() || (accType === 'bank' ? '1000••••9402' : '+251 911 ••••'),
+          currency: accCurrency,
+          balance: Number(initialBal.toFixed(2)),
+          shareWithSuperApp: accShareSuperApp,
+          color: preset?.color || acc.color || (accType === 'bank' ? '#2563eb' : '#059669'),
+          updatedAt: new Date().toISOString().slice(0, 10),
+        };
+      });
+
+      setAccounts(nextAccounts);
+
+      // Update accountName on linked ledger entries so transaction history stays consistent
+      setEntries((prev) =>
+        prev.map((entry) =>
+          entry.accountId === editingAccountId
+            ? { ...entry, accountName: accName.trim() }
+            : entry
+        )
+      );
+
+      if (autoSyncSuperApp && nextAccounts.some((a) => a.shareWithSuperApp)) {
+        pushSharedBalanceToSuperApp(nextAccounts, false);
+      } else {
+        sdk.ui.hapticFeedback('success');
+        sdk.ui.showToast(
+          `Updated ${accType}: ${accName.trim()} (${formatMoney(initialBal, accCurrency)})`,
+          'success'
+        );
+      }
+
+      resetAccountForm();
+      return;
+    }
+
     const newAcc: FinTrackAccount = {
       id: `acc-${Date.now()}`,
       name: accName.trim(),
@@ -782,7 +903,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
     const nextAccounts = [newAcc, ...accounts];
     setAccounts(nextAccounts);
-    if (!txAccountId) setTxAccountId(newAcc.id);
+    if (!txAccountId || txAccountId === 'NONE') setTxAccountId(newAcc.id);
     if (!schedAccountId) setSchedAccountId(newAcc.id);
     if (!loanAccountId) setLoanAccountId(newAcc.id);
 
@@ -793,10 +914,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       sdk.ui.showToast(`Added ${newAcc.type}: ${newAcc.name} (${newAcc.currency})`, 'success');
     }
 
-    setAccName('');
-    setAccBalance('');
-    setAccNumber('');
-    setShowAddAccountForm(false);
+    resetAccountForm();
   };
 
   const handleToggleAccountShare = (accountId: string) => {
@@ -813,6 +931,12 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const handleDeleteAccount = (accountId: string) => {
     const nextAccounts = accounts.filter((a) => a.id !== accountId);
     setAccounts(nextAccounts);
+    if (editingAccountId === accountId) {
+      resetAccountForm();
+    }
+    if (txAccountId === accountId) {
+      setTxAccountId(nextAccounts[0]?.id || 'NONE');
+    }
     sdk.ui.hapticFeedback('medium');
     if (autoSyncSuperApp) {
       pushSharedBalanceToSuperApp(nextAccounts, true);
@@ -866,6 +990,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       category: 'Transfer',
       accountId: fromAcc.id,
       accountName: `${fromAcc.name} → ${toAcc.name}`,
+      transferToAccountId: toAcc.id,
       date: new Date().toISOString().slice(0, 10),
     };
     setEntries((prev) => [transferEntry, ...prev]);
@@ -882,7 +1007,29 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     );
   };
 
-  // Handlers: Ledger Transactions
+  // Handlers: Ledger Transactions (Create, Update, Delete with Auto-Sync Balance)
+  const startEditTransaction = (entry: FinTrackEntry) => {
+    setEditingTxId(entry.id);
+    setTxTitle(entry.title);
+    setTxAmount(String(entry.amount));
+    setTxCurrency(entry.currency);
+    setTxType(entry.type);
+    setTxCategory(entry.category);
+    setTxAccountId(entry.accountId || 'NONE');
+    setTxDate(entry.date || new Date().toISOString().slice(0, 10));
+    setChargeSuperAppWallet(Boolean(entry.settledViaWallet));
+    setShowAddTxForm(true);
+    sdk.ui.hapticFeedback('light');
+  };
+
+  const resetTransactionForm = () => {
+    setEditingTxId(null);
+    setTxTitle('');
+    setTxAmount('');
+    setTxDate(new Date().toISOString().slice(0, 10));
+    setShowAddTxForm(false);
+  };
+
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericAmount = parseFloat(txAmount);
@@ -891,6 +1038,110 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       return;
     }
 
+    const linkedAcc =
+      txAccountId && txAccountId !== 'NONE'
+        ? accounts.find((a) => a.id === txAccountId)
+        : undefined;
+
+    // UPDATE EXISTING TRANSACTION (Auto-syncing balance delta across old & new account)
+    if (editingTxId) {
+      const oldEntry = entries.find((item) => item.id === editingTxId);
+      if (!oldEntry) {
+        resetTransactionForm();
+        return;
+      }
+
+      const adjustments: Array<{
+        accountId?: string;
+        deltaAmount: number;
+        deltaCurrency: CurrencyCode;
+      }> = [];
+
+      // 1. Reverse oldEntry's effect on its previously linked account(s)
+      if (oldEntry.accountId) {
+        const reverseOldSigned =
+          oldEntry.type === 'income' ? -oldEntry.amount : oldEntry.amount;
+        adjustments.push({
+          accountId: oldEntry.accountId,
+          deltaAmount: reverseOldSigned,
+          deltaCurrency: oldEntry.currency,
+        });
+      }
+      if (oldEntry.transferToAccountId) {
+        adjustments.push({
+          accountId: oldEntry.transferToAccountId,
+          deltaAmount: -oldEntry.amount,
+          deltaCurrency: oldEntry.currency,
+        });
+      }
+
+      // 2. Apply updated transaction's effect on the newly selected account
+      if (linkedAcc) {
+        const applyNewSigned = txType === 'income' ? numericAmount : -numericAmount;
+        adjustments.push({
+          accountId: linkedAcc.id,
+          deltaAmount: applyNewSigned,
+          deltaCurrency: txCurrency,
+        });
+      }
+
+      applyAccountBalanceAdjustments(adjustments);
+
+      // If settled directly via SuperApp Wallet without shared account auto-sync, sync the net difference
+      const isHandledBySharedAutoSync =
+        autoSyncSuperApp &&
+        ((oldEntry.accountId &&
+          accounts.find((a) => a.id === oldEntry.accountId)?.shareWithSuperApp) ||
+          (linkedAcc && linkedAcc.shareWithSuperApp));
+
+      if ((oldEntry.settledViaWallet || chargeSuperAppWallet) && !isHandledBySharedAutoSync) {
+        const oldWalletSigned = oldEntry.settledViaWallet
+          ? convertAmount(
+              oldEntry.type === 'income' ? oldEntry.amount : -oldEntry.amount,
+              oldEntry.currency,
+              baseCurrency
+            )
+          : 0;
+        const newWalletSigned = chargeSuperAppWallet
+          ? convertAmount(
+              txType === 'income' ? numericAmount : -numericAmount,
+              txCurrency,
+              baseCurrency
+            )
+          : 0;
+        const netWalletDelta = Number((newWalletSigned - oldWalletSigned).toFixed(2));
+        if (netWalletDelta > 0.01) {
+          await sdk.payment.credit(netWalletDelta, `FinTrack Adjustment: ${txTitle.trim()}`);
+        } else if (netWalletDelta < -0.01) {
+          await sdk.payment.pay(Math.abs(netWalletDelta), `FinTrack Adjustment: ${txTitle.trim()}`);
+        }
+      }
+
+      const updatedEntry: FinTrackEntry = {
+        ...oldEntry,
+        title: txTitle.trim(),
+        amount: numericAmount,
+        currency: txCurrency,
+        type: txType,
+        category: txCategory,
+        accountId: linkedAcc?.id,
+        accountName: linkedAcc?.name,
+        transferToAccountId: undefined,
+        date: txDate || oldEntry.date,
+        settledViaWallet: chargeSuperAppWallet,
+      };
+
+      setEntries((prev) => prev.map((item) => (item.id === editingTxId ? updatedEntry : item)));
+      resetTransactionForm();
+      sdk.ui.hapticFeedback('success');
+      sdk.ui.showToast(
+        `Updated transaction & synced ${linkedAcc ? linkedAcc.name : 'ledger'} balance`,
+        'success'
+      );
+      return;
+    }
+
+    // CREATE NEW TRANSACTION
     let settledViaWallet = false;
     if (chargeSuperAppWallet) {
       const amountInBase = convertAmount(numericAmount, txCurrency, baseCurrency);
@@ -910,11 +1161,15 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       settledViaWallet = true;
     }
 
-    const linkedAcc = accounts.find((a) => a.id === txAccountId);
     if (linkedAcc) {
       const signedInTxCurr = txType === 'income' ? numericAmount : -numericAmount;
-      const deltaInAccCurr = convertAmount(signedInTxCurr, txCurrency, linkedAcc.currency);
-      adjustAccountBalance(linkedAcc.id, deltaInAccCurr);
+      applyAccountBalanceAdjustments([
+        {
+          accountId: linkedAcc.id,
+          deltaAmount: signedInTxCurr,
+          deltaCurrency: txCurrency,
+        },
+      ]);
     }
 
     const newEntry: FinTrackEntry = {
@@ -926,25 +1181,82 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       category: txType === 'income' && txCategory === 'Dining' ? 'Salary' : txCategory,
       accountId: linkedAcc?.id,
       accountName: linkedAcc?.name,
-      date: new Date().toISOString().slice(0, 10),
+      date: txDate || new Date().toISOString().slice(0, 10),
       settledViaWallet,
     };
 
     setEntries((prev) => [newEntry, ...prev]);
-    setTxTitle('');
-    setTxAmount('');
-    setShowAddTxForm(false);
+    resetTransactionForm();
     sdk.ui.hapticFeedback('success');
     sdk.ui.showToast(
-      `Recorded ${txType}: ${formatMoney(numericAmount, txCurrency)}`,
+      `Recorded ${txType}: ${formatMoney(numericAmount, txCurrency)}${
+        linkedAcc ? ` (${linkedAcc.name} synced)` : ''
+      }`,
       'success'
     );
   };
 
-  const handleDeleteEntry = (id: string) => {
+  const handleDeleteEntry = async (id: string) => {
+    const targetEntry = entries.find((item) => item.id === id);
+    if (!targetEntry) return;
+
     sdk.ui.hapticFeedback('medium');
+
+    const adjustments: Array<{
+      accountId?: string;
+      deltaAmount: number;
+      deltaCurrency: CurrencyCode;
+    }> = [];
+
+    if (targetEntry.accountId) {
+      // Reverse transaction effect: deleting an income subtracts it; deleting an expense refunds it
+      const reverseDelta =
+        targetEntry.type === 'income' ? -targetEntry.amount : targetEntry.amount;
+      adjustments.push({
+        accountId: targetEntry.accountId,
+        deltaAmount: reverseDelta,
+        deltaCurrency: targetEntry.currency,
+      });
+    }
+
+    if (targetEntry.transferToAccountId) {
+      adjustments.push({
+        accountId: targetEntry.transferToAccountId,
+        deltaAmount: -targetEntry.amount,
+        deltaCurrency: targetEntry.currency,
+      });
+    }
+
+    if (adjustments.length > 0) {
+      applyAccountBalanceAdjustments(adjustments);
+    }
+
+    const linkedAcc = targetEntry.accountId
+      ? accounts.find((a) => a.id === targetEntry.accountId)
+      : undefined;
+    const isHandledBySharedAutoSync =
+      autoSyncSuperApp && Boolean(linkedAcc?.shareWithSuperApp);
+
+    if (targetEntry.settledViaWallet && !isHandledBySharedAutoSync) {
+      const amtInBase = convertAmount(targetEntry.amount, targetEntry.currency, baseCurrency);
+      if (targetEntry.type === 'expense') {
+        await sdk.payment.credit(amtInBase, `Reversed Expense: ${targetEntry.title}`);
+      } else {
+        await sdk.payment.pay(amtInBase, `Reversed Income: ${targetEntry.title}`);
+      }
+    }
+
+    if (editingTxId === id) {
+      resetTransactionForm();
+    }
+
     setEntries((prev) => prev.filter((item) => item.id !== id));
-    sdk.ui.showToast('Transaction removed from ledger', 'info');
+    sdk.ui.showToast(
+      linkedAcc
+        ? `Transaction deleted & ${linkedAcc.name} balance restored`
+        : 'Transaction removed from ledger',
+      'info'
+    );
   };
 
   // Handlers: Loan Providers (P2P & B2C) & Loan Tracking
@@ -1264,8 +1576,9 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const isOverAlertThreshold = portfolioSummary.budgetUsedPercent >= alertThresholdPercent;
 
   return (
-    <div className="p-4 space-y-4 pb-28" style={{ color: tokens.textPrimary }}>
-      {/* Multi-Currency Selector & FX Rate Bar */}
+    <div className="min-h-full flex flex-col justify-between" style={{ color: tokens.textPrimary }}>
+      <div className="p-4 space-y-4 pb-8 flex-1">
+        {/* Multi-Currency Selector & FX Rate Bar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           {(Object.keys(CURRENCIES) as CurrencyCode[]).map((code) => {
@@ -1482,7 +1795,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       >
         {[
           { id: 'accounts', label: 'Accounts', icon: Landmark },
-          { id: 'ledger', label: 'Ledger', icon: TrendingUp },
+          { id: 'ledger', label: 'Transactions', icon: TrendingUp },
           { id: 'loans', label: 'Loans', icon: Briefcase },
           { id: 'scheduled', label: 'Schedule', icon: CalendarClock },
           { id: 'analytics', label: 'Insights', icon: PieChart },
@@ -1578,8 +1891,16 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
               <button
                 type="button"
                 onClick={() => {
-                  setShowAddAccountForm(!showAddAccountForm);
-                  setShowTransferForm(false);
+                  if (showAddAccountForm && !editingAccountId) {
+                    resetAccountForm();
+                  } else {
+                    setEditingAccountId(null);
+                    setAccName('');
+                    setAccBalance('');
+                    setAccNumber('');
+                    setShowAddAccountForm(true);
+                    setShowTransferForm(false);
+                  }
                 }}
                 style={{
                   backgroundColor: tokens.accentPrimary,
@@ -1628,21 +1949,25 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
             </button>
           </div>
 
-          {/* Add Bank or Wallet Account Form */}
+          {/* Add or Update Bank / Wallet Account Form */}
           {showAddAccountForm && (
             <form
               onSubmit={handleCreateAccount}
               style={{
                 backgroundColor: tokens.bgCard,
-                borderColor: tokens.borderDefault,
+                borderColor: editingAccountId ? tokens.borderAccent : tokens.borderDefault,
               }}
               className="p-4 rounded-2xl border space-y-3 animate-in fade-in duration-150"
             >
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold">New Bank or Digital Wallet Account</h4>
+                <h4 className="text-xs font-bold">
+                  {editingAccountId
+                    ? 'Update Bank or Digital Wallet Account'
+                    : 'New Bank or Digital Wallet Account'}
+                </h4>
                 <button
                   type="button"
-                  onClick={() => setShowAddAccountForm(false)}
+                  onClick={resetAccountForm}
                   className="text-[11px]"
                   style={{ color: tokens.textSecondary }}
                 >
@@ -1756,7 +2081,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
                 <div>
                   <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                    Opening Balance
+                    {editingAccountId ? 'Current Balance' : 'Opening Balance'}
                   </label>
                   <input
                     type="number"
@@ -1818,7 +2143,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                 }}
                 className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
               >
-                Save Account
+                {editingAccountId ? 'Update Account' : 'Save Account'}
               </button>
             </form>
           )}
@@ -2018,24 +2343,65 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                             ? tokens.borderAccent
                             : tokens.borderDefault,
                         }}
-                        className="px-2.5 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1.5 transition"
+                        className="px-2.5 py-1.5 rounded-lg border text-[10px] font-bold flex items-center gap-1.5 transition"
                       >
                         <Share2 className="w-3 h-3" />
                         <span>
                           {acc.shareWithSuperApp
-                            ? 'Shared with SuperApp Wallet'
+                            ? 'Shared with SuperApp'
                             : 'Share with SuperApp'}
                         </span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAccount(acc.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 transition"
-                        aria-label="Delete account"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTxId(null);
+                            setTxAccountId(acc.id);
+                            setTxCurrency(acc.currency);
+                            setShowAddTxForm(true);
+                            setActiveTab('ledger');
+                            sdk.ui.hapticFeedback('light');
+                          }}
+                          style={{
+                            backgroundColor: tokens.bgSurface,
+                            borderColor: tokens.borderDefault,
+                            color: tokens.textSecondary,
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition hover:opacity-90"
+                          title="Record transaction for this account"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Tx</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => startEditAccount(acc)}
+                          style={{
+                            backgroundColor: tokens.bgSurface,
+                            borderColor: tokens.borderDefault,
+                            color: tokens.textPrimary,
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition hover:opacity-90"
+                          aria-label={`Edit account ${acc.name}`}
+                          title="Edit account"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAccount(acc.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                          aria-label={`Delete account ${acc.name}`}
+                          title="Delete account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2091,7 +2457,20 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
             <button
               type="button"
-              onClick={() => setShowAddTxForm(!showAddTxForm)}
+              onClick={() => {
+                if (showAddTxForm && !editingTxId) {
+                  resetTransactionForm();
+                } else {
+                  setEditingTxId(null);
+                  setTxTitle('');
+                  setTxAmount('');
+                  setTxDate(new Date().toISOString().slice(0, 10));
+                  if ((!txAccountId || txAccountId === 'NONE') && accounts[0]) {
+                    setTxAccountId(accounts[0].id);
+                  }
+                  setShowAddTxForm(true);
+                }
+              }}
               style={{
                 backgroundColor: tokens.accentPrimary,
                 color: tokens.accentContrast,
@@ -2108,15 +2487,17 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
               onSubmit={handleAddTransaction}
               style={{
                 backgroundColor: tokens.bgCard,
-                borderColor: tokens.borderDefault,
+                borderColor: editingTxId ? tokens.borderAccent : tokens.borderDefault,
               }}
               className="p-4 rounded-2xl border space-y-3 animate-in fade-in duration-150"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold">Record Income or Expense</h3>
+                <h3 className="text-xs font-bold">
+                  {editingTxId ? 'Update Transaction (Auto-Syncs Account Balance)' : 'Record Income or Expense'}
+                </h3>
                 <button
                   type="button"
-                  onClick={() => setShowAddTxForm(false)}
+                  onClick={resetTransactionForm}
                   className="text-[11px]"
                   style={{ color: tokens.textSecondary }}
                 >
@@ -2234,33 +2615,53 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                         <option value="Subscriptions">Subscriptions</option>
                         <option value="Shopping">Shopping</option>
                         <option value="Loan">Loan</option>
+                        <option value="Transfer">Transfer</option>
                       </>
                     )}
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                  Bank or Wallet Account (Optional)
-                </label>
-                <select
-                  value={txAccountId}
-                  onChange={(e) => setTxAccountId(e.target.value)}
-                  style={{
-                    backgroundColor: tokens.bgInput,
-                    borderColor: tokens.borderDefault,
-                    color: tokens.textPrimary,
-                  }}
-                  className="w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
-                >
-                  <option value="">— Do not link to specific account —</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.currency} {a.balance.toFixed(2)})
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
+                    Linked Bank or Wallet Account
+                  </label>
+                  <select
+                    value={txAccountId || 'NONE'}
+                    onChange={(e) => setTxAccountId(e.target.value)}
+                    style={{
+                      backgroundColor: tokens.bgInput,
+                      borderColor: tokens.borderDefault,
+                      color: tokens.textPrimary,
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                  >
+                    <option value="NONE">— No linked account —</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.currency} {a.balance.toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={txDate}
+                    onChange={(e) => setTxDate(e.target.value)}
+                    style={{
+                      backgroundColor: tokens.bgInput,
+                      borderColor: tokens.borderDefault,
+                      color: tokens.textPrimary,
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                  />
+                </div>
               </div>
 
               <label
@@ -2299,7 +2700,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                 }}
                 className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
               >
-                Save Transaction
+                {editingTxId ? 'Update Transaction & Sync Balance' : 'Save Transaction'}
               </button>
             </form>
           )}
@@ -2337,7 +2738,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                   key={entry.id}
                   style={{
                     backgroundColor: tokens.bgCard,
-                    borderColor: tokens.borderDefault,
+                    borderColor: editingTxId === entry.id ? tokens.borderAccent : tokens.borderDefault,
                   }}
                   className="p-3.5 rounded-2xl border flex items-center justify-between gap-3"
                 >
@@ -2365,8 +2766,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="text-right mr-1">
                       <div
                         className={`text-xs font-extrabold tabular-nums ${
                           entry.type === 'income' ? 'text-emerald-400' : ''
@@ -2386,9 +2787,19 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                     </div>
                     <button
                       type="button"
+                      onClick={() => startEditTransaction(entry)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                      aria-label={`Edit transaction ${entry.title}`}
+                      title="Edit transaction"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleDeleteEntry(entry.id)}
-                      className="p-1 text-slate-400 hover:text-rose-400 transition"
-                      aria-label="Delete transaction"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                      aria-label={`Delete transaction ${entry.title}`}
+                      title="Delete transaction"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -3869,6 +4280,69 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
           </form>
         </div>
       )}
+      </div>
+
+      {/* Fixed/Sticky iOS-HIG Bottom Navigation Bar for FinTrack */}
+      <nav
+        aria-label="FinTrack Bottom Navigation"
+        style={{
+          backgroundColor: tokens.bgGlass,
+          borderColor: tokens.borderDefault,
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+        }}
+        className="sticky bottom-0 left-0 right-0 z-30 h-16 border-t px-1.5 flex items-center justify-around select-none shrink-0 transition-colors duration-200"
+      >
+        {[
+          { id: 'accounts', label: 'Accounts', icon: Landmark, count: accounts.length },
+          { id: 'ledger', label: 'Transactions', icon: TrendingUp, count: entries.length },
+          { id: 'loans', label: 'Loans', icon: Briefcase, count: loans.length },
+          { id: 'scheduled', label: 'Schedule', icon: CalendarClock, count: scheduledTxs.length },
+          { id: 'analytics', label: 'Insights', icon: PieChart },
+          { id: 'goals', label: 'Goals', icon: Target, count: goals.length },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.id as any);
+                sdk.ui.hapticFeedback('light');
+              }}
+              style={{
+                color: isActive ? tokens.accentPrimary : tokens.textMuted,
+              }}
+              className="flex flex-col items-center justify-center flex-1 min-h-[48px] py-1 transition-all duration-150 ios-active relative"
+            >
+              <div className="relative">
+                <Icon
+                  className={`w-4 h-4 transition-transform duration-150 ${
+                    isActive ? 'scale-110' : ''
+                  }`}
+                />
+                {isActive && (
+                  <span
+                    className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full animate-pulse"
+                    style={{
+                      backgroundColor: tokens.accentPrimary,
+                      boxShadow: `0 0 8px ${tokens.accentGlow}`,
+                    }}
+                  />
+                )}
+              </div>
+              <span
+                className={`text-[10px] mt-1 tracking-tight truncate max-w-full ${
+                  isActive ? 'font-bold' : 'font-medium'
+                }`}
+              >
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };

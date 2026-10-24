@@ -80,6 +80,11 @@ interface SuperAppContextValue {
     appId: string
   ) => Promise<{ success: boolean; previousBalance: number; syncedBalance: number }>;
   topUpWallet: (amount: number) => void;
+  updateWalletTransaction: (
+    txId: string,
+    updates: { description: string; amount: number; type: 'debit' | 'credit' }
+  ) => Promise<boolean>;
+  deleteWalletTransaction: (txId: string) => Promise<boolean>;
 
   grantedPermissions: Record<string, string[]>;
   requestPermission: (appId: string, permission: string) => Promise<boolean>;
@@ -640,6 +645,97 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   };
 
+  const updateWalletTransaction = async (
+    txId: string,
+    updates: { description: string; amount: number; type: 'debit' | 'credit' }
+  ): Promise<boolean> => {
+    const existingTx = transactions.find((t) => t.id === txId);
+    if (!existingTx || !Number.isFinite(updates.amount) || updates.amount <= 0) {
+      return false;
+    }
+
+    const oldSigned = existingTx.type === 'credit' ? existingTx.amount : -existingTx.amount;
+    const newSigned = updates.type === 'credit' ? updates.amount : -updates.amount;
+    const netDelta = Number((newSigned - oldSigned).toFixed(2));
+    const nextBalance = Math.max(0, Number((walletBalance + netDelta).toFixed(2)));
+
+    setWalletBalance(nextBalance);
+    localStorage.setItem('omnimini_wallet_balance_v3', nextBalance.toString());
+
+    const updatedTx: WalletTransaction = {
+      ...existingTx,
+      description: updates.description.trim() || existingTx.description,
+      amount: Number(updates.amount.toFixed(2)),
+      type: updates.type,
+    };
+
+    setTransactions((prev) => {
+      const next = prev.map((t) => (t.id === txId ? updatedTx : t));
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
+      return next;
+    });
+
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, nextBalance).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService
+          .updateTransaction(uid, txId, {
+            amount: updatedTx.amount,
+            type: updatedTx.type,
+            description: updatedTx.description,
+          })
+          .catch(() => {});
+      }
+    }
+
+    showToast('Transaction updated and balance synced', 'success');
+    hapticFeedback('success');
+    return true;
+  };
+
+  const deleteWalletTransaction = async (txId: string): Promise<boolean> => {
+    const existingTx = transactions.find((t) => t.id === txId);
+    if (!existingTx) return false;
+
+    // Reverse the transaction's effect on walletBalance
+    const reverseDelta = existingTx.type === 'credit' ? -existingTx.amount : existingTx.amount;
+    const nextBalance = Math.max(0, Number((walletBalance + reverseDelta).toFixed(2)));
+
+    setWalletBalance(nextBalance);
+    localStorage.setItem('omnimini_wallet_balance_v3', nextBalance.toString());
+
+    setTransactions((prev) => {
+      const next = prev.filter((t) => t.id !== txId);
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
+      return next;
+    });
+
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, nextBalance).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService.deleteTransaction(uid, txId).catch(() => {});
+      }
+    }
+
+    showToast('Transaction deleted and balance adjusted', 'info');
+    hapticFeedback('medium');
+    return true;
+  };
+
   // 6. Centralized App Permissions Management
   const [grantedPermissions, setGrantedPermissions] = useState<Record<string, string[]>>(() => {
     try {
@@ -1188,6 +1284,8 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         creditWallet,
         syncSharedWalletBalance,
         topUpWallet,
+        updateWalletTransaction,
+        deleteWalletTransaction,
         grantedPermissions,
         requestPermission,
         revokePermission,

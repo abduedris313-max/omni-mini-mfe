@@ -12,6 +12,8 @@ import {
   QrCode,
   Camera,
   Share2,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 
 export const WalletPage: React.FC = () => {
@@ -21,6 +23,8 @@ export const WalletPage: React.FC = () => {
     walletBalance,
     transactions,
     topUpWallet,
+    updateWalletTransaction,
+    deleteWalletTransaction,
     openMiniApp,
     grantedPermissions,
     revokePermission,
@@ -35,6 +39,11 @@ export const WalletPage: React.FC = () => {
 
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
+
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [editTxDesc, setEditTxDesc] = useState('');
+  const [editTxAmount, setEditTxAmount] = useState('');
+  const [editTxType, setEditTxType] = useState<'debit' | 'credit'>('debit');
 
   // Read FinTrack shared balance metadata if synced
   const finTrackSharedSummary = (() => {
@@ -307,19 +316,167 @@ export const WalletPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div
-                  className={`text-xs font-mono font-bold ${
-                    tx.type === 'credit' ? 'text-emerald-500' : ''
-                  }`}
-                  style={tx.type !== 'credit' ? { color: themeTokens.textPrimary } : undefined}
-                >
-                  {tx.type === 'credit' ? '+' : '-'}${tx.amount.toFixed(2)}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div
+                      className={`text-xs font-mono font-bold tabular-nums ${
+                        tx.type === 'credit' ? 'text-emerald-500' : ''
+                      }`}
+                      style={tx.type !== 'credit' ? { color: themeTokens.textPrimary } : undefined}
+                    >
+                      {tx.type === 'credit' ? '+' : '-'}${tx.amount.toFixed(2)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTxId(tx.id);
+                        setEditTxDesc(tx.description);
+                        setEditTxAmount(tx.amount.toFixed(2));
+                        setEditTxType(tx.type);
+                        hapticFeedback('light');
+                      }}
+                      className="p-2 rounded-lg text-slate-400 hover:text-blue-400 transition min-h-[36px] min-w-[36px] flex items-center justify-center"
+                      aria-label="Edit transaction"
+                      title="Edit transaction"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        deleteWalletTransaction(tx.id);
+                      }}
+                      className="p-2 rounded-lg text-slate-400 hover:text-rose-400 transition min-h-[36px] min-w-[36px] flex items-center justify-center"
+                      aria-label="Delete transaction"
+                      title="Delete transaction"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
-      </div>
+
+      {/* Edit Wallet Transaction Modal */}
+      {editingTxId && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
+          <div
+            style={{
+              backgroundColor: themeTokens.bgCard,
+              borderColor: themeTokens.borderDefault,
+              color: themeTokens.textPrimary,
+            }}
+            className="w-full max-w-sm rounded-3xl border p-6 shadow-2xl relative space-y-4"
+          >
+            <div>
+              <h3 className="text-base font-bold" style={{ color: themeTokens.textPrimary }}>
+                Update Wallet Transaction
+              </h3>
+              <p className="text-xs mt-0.5" style={{ color: themeTokens.textSecondary }}>
+                Changes automatically recalculate and sync your wallet balance.
+              </p>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const amt = parseFloat(editTxAmount);
+                if (!editTxDesc.trim() || !Number.isFinite(amt) || amt <= 0) {
+                  showToast('Enter a valid description and positive amount', 'warning');
+                  return;
+                }
+                await updateWalletTransaction(editingTxId, {
+                  description: editTxDesc.trim(),
+                  amount: amt,
+                  type: editTxType,
+                });
+                setEditingTxId(null);
+              }}
+              className="space-y-3.5"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {(['debit', 'credit'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setEditTxType(t)}
+                    style={{
+                      backgroundColor: editTxType === t ? themeTokens.accentPrimary : themeTokens.bgSurface,
+                      color: editTxType === t ? themeTokens.accentContrast : themeTokens.textSecondary,
+                      borderColor: editTxType === t ? 'transparent' : themeTokens.borderDefault,
+                    }}
+                    className="py-2 rounded-xl border text-xs font-bold capitalize transition"
+                  >
+                    {t === 'credit' ? 'Credit (+ Balance)' : 'Debit (- Balance)'}
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold block mb-1" style={{ color: themeTokens.textSecondary }}>
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={editTxDesc}
+                  onChange={(e) => setEditTxDesc(e.target.value)}
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold block mb-1" style={{ color: themeTokens.textSecondary }}>
+                  Amount ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editTxAmount}
+                  onChange={(e) => setEditTxAmount(e.target.value)}
+                  style={{
+                    backgroundColor: themeTokens.bgInput,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textPrimary,
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border text-sm font-bold font-mono tabular-nums focus:outline-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTxId(null)}
+                  style={{
+                    backgroundColor: themeTokens.bgSurface,
+                    borderColor: themeTokens.borderDefault,
+                    color: themeTokens.textSecondary,
+                  }}
+                  className="flex-1 py-2.5 rounded-xl border text-xs font-semibold hover:opacity-80 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    backgroundColor: themeTokens.accentPrimary,
+                    color: themeTokens.accentContrast,
+                    boxShadow: `0 4px 12px ${themeTokens.accentGlow}`,
+                  }}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold transition shadow-md"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Centralized Permission Access Control */}
       <div className="space-y-3">

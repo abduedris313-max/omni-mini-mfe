@@ -20,7 +20,7 @@ export const BottomNavBar: React.FC = () => {
     { id: 'home', label: 'Home', icon: Home },
     { id: 'store', label: 'Store', icon: Compass },
     { id: 'developer', label: 'Dev Hub', icon: Code2 },
-    { id: 'wallet', label: 'Activity', icon: Wallet },
+    { id: 'wallet', label: 'Wallet', icon: Wallet },
     { id: 'settings', label: 'Settings', icon: Settings2 },
   ];
 
@@ -46,7 +46,7 @@ export const BottomNavBar: React.FC = () => {
               setCurrentTab(tab.id);
               hapticFeedback('light');
             }}
-            className="flex flex-col items-center justify-center flex-1 py-1 transition-all duration-150 ios-active relative"
+            className="flex flex-col items-center justify-center flex-1 min-h-[44px] py-1 transition-all duration-150 ios-active relative"
             style={{
               color: isActive ? themeTokens.accentPrimary : themeTokens.textMuted,
             }}
