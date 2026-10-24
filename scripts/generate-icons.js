@@ -517,7 +517,62 @@ const manifestJson = {
 
 fs.writeFileSync(path.join(publicDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2) + '\n');
 
+// -----------------------------------------------------------------------------
+// 4. Mirror Icons & Manifest to Repository Root for Direct Branch Hosting
+//    (Ensures https://<user>.github.io/<repo>/ resolves ./icon.svg, ./pwa-*.png,
+//     ./favicon-*.png, and ./icons/* even if GitHub Pages serves from root `/`)
+// -----------------------------------------------------------------------------
+const rootDir = path.resolve('.');
+const rootIconsDir = path.join(rootDir, 'icons');
+const rootAndroidIconsDir = path.join(rootIconsDir, 'android');
+
+fs.mkdirSync(rootIconsDir, { recursive: true });
+fs.mkdirSync(rootAndroidIconsDir, { recursive: true });
+
+for (const size of ANY_RESOLUTIONS) {
+  const fileName = `icon-${size}x${size}.png`;
+  fs.writeFileSync(path.join(rootIconsDir, fileName), generatedBuffers.get(size));
+}
+
+for (const size of MASKABLE_RESOLUTIONS) {
+  const srcPath = path.join(iconsDir, `maskable-icon-${size}x${size}.png`);
+  const dstPath = path.join(rootIconsDir, `maskable-icon-${size}x${size}.png`);
+  fs.copyFileSync(srcPath, dstPath);
+  if (size === 192 || size === 512) {
+    fs.copyFileSync(
+      path.join(publicDir, `pwa-maskable-${size}x${size}.png`),
+      path.join(rootDir, `pwa-maskable-${size}x${size}.png`)
+    );
+  }
+}
+
+for (const bucket of ANDROID_MIPMAP_BUCKETS) {
+  const srcBucketDir = path.join(androidIconsDir, bucket.folder);
+  const dstBucketDir = path.join(rootAndroidIconsDir, bucket.folder);
+  fs.mkdirSync(dstBucketDir, { recursive: true });
+  for (const file of ['ic_launcher.png', 'ic_launcher_round.png', 'ic_launcher_foreground.png']) {
+    fs.copyFileSync(path.join(srcBucketDir, file), path.join(dstBucketDir, file));
+  }
+}
+
+for (const rootAsset of [
+  'icon.svg',
+  'icon-maskable.svg',
+  'favicon.ico',
+  'favicon-16x16.png',
+  'favicon-32x32.png',
+  'apple-touch-icon.png',
+  'pwa-192x192.png',
+  'pwa-512x512.png',
+  'manifest.json',
+]) {
+  fs.copyFileSync(path.join(publicDir, rootAsset), path.join(rootDir, rootAsset));
+}
+
+fs.writeFileSync(path.join(rootDir, '.nojekyll'), '', 'utf8');
+
 console.log(
-  `Successfully generated ${ANY_RESOLUTIONS.length} standard PNG resolutions, ${MASKABLE_RESOLUTIONS.length} maskable PNGs, multi-size favicon.ico, public/manifest.json, and ${ANDROID_MIPMAP_BUCKETS.length} Android mipmap density buckets!`
+  `Successfully generated ${ANY_RESOLUTIONS.length} standard PNG resolutions, ${MASKABLE_RESOLUTIONS.length} maskable PNGs, multi-size favicon.ico, public/manifest.json, root GitHub Pages mirror, and ${ANDROID_MIPMAP_BUCKETS.length} Android mipmap density buckets!`
 );
+
 

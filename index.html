@@ -115,7 +115,27 @@
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased selection:bg-blue-500/30 selection:text-blue-200">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // When served by Vite Dev Server or compiled via `vite build`, `window.__OMNIMINI_VITE_RUNTIME__` is true.
+      // When GitHub Pages serves directly from the raw repository root (`/`) instead of `dist/`,
+      // this loader mounts the pre-compiled production bundle from `./dist/assets/` without 404 errors.
+      if (!window.__OMNIMINI_VITE_RUNTIME__) {
+        var manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = './manifest.webmanifest';
+        document.head.appendChild(manifestLink);
+
+        var cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        cssLink.href = './dist/assets/omnimini-bundle.css';
+        document.head.appendChild(cssLink);
+
+        var bundleScript = document.createElement('script');
+        bundleScript.type = 'module';
+        bundleScript.src = './dist/assets/omnimini-bundle.js';
+        document.body.appendChild(bundleScript);
+      }
+    </script>
   </body>
 </html>
 

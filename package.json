@@ -14,8 +14,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build",
-    "build:gh-pages": "vite build && node ./scripts/prepare-gh-pages.mjs",
+    "build": "node ./scripts/generate-icons.js && vite build && node ./scripts/prepare-gh-pages.mjs",
+    "build:gh-pages": "node ./scripts/generate-icons.js && vite build && node ./scripts/prepare-gh-pages.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",

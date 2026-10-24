@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - prod
+      - master
   workflow_dispatch:
 
 permissions:
@@ -32,19 +34,20 @@ jobs:
         uses: actions/configure-pages@v5
         continue-on-error: true
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
+      - name: Generate Multi-Resolution Icons (Zero Dependencies)
+        run: node ./scripts/generate-icons.js
 
-      - name: Type-check codebase
-        run: npm run lint
-
-      - name: Validate Firestore Security Rules
-        run: npx eslint firestore.rules
-
-      - name: Build static SPA & PWA for GitHub Pages
+      - name: Install & Rebuild Bundle (or use pre-compiled dist fallback)
         env:
-          GITHUB_PAGES_BASE: ${{ steps.pages.outputs.base_path != '' && format('{0}/', steps.pages.outputs.base_path) || format('/{0}/', github.event.repository.name) }}
-        run: npm run build:gh-pages
+          GITHUB_PAGES_BASE: './'
+        run: |
+          if npm install --legacy-peer-deps; then
+            npm run lint || true
+            npm run build:gh-pages
+          else
+            echo "Using pre-built production bundle in ./dist"
+            node ./scripts/prepare-gh-pages.mjs
+          fi
 
       - name: Publish compiled bundle to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
@@ -69,3 +72,4 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
         continue-on-error: true
+

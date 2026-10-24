@@ -15,6 +15,7 @@ function suppressViteHmrPlugin(): Plugin {
             tag: 'script',
             attrs: { type: 'text/javascript' },
             children: `
+window.__OMNIMINI_VITE_RUNTIME__ = true;
 (function() {
   var origConsoleError = console.error;
   console.error = function() {
@@ -97,6 +98,11 @@ function suppressViteHmrPlugin(): Plugin {
 })();
 `,
             injectTo: 'head-prepend',
+          },
+          {
+            tag: 'script',
+            attrs: { type: 'module', src: '/src/main.tsx' },
+            injectTo: 'body',
           },
         ];
       },
