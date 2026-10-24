@@ -1,13 +1,14 @@
 # OmniMini (`omni-mini-mfe`) — Super App & Mini App Starter Package
 
 ![CI Build Status](https://img.shields.io/badge/build-passing-10b981?style=flat-square)
+![Android APK & AAB](https://img.shields.io/badge/Android-Capacitor%20APK%20%26%20AAB-3ddc84?style=flat-square&logo=android)
 ![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Deployed-2563eb?style=flat-square&logo=github)
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20%26%20Firestore-f59e0b?style=flat-square&logo=firebase)
 ![NPM Package](https://img.shields.io/badge/npm-omni--mini--mfe%20v1.0.0-cb3837?style=flat-square)
 ![PWA Ready](https://img.shields.io/badge/PWA-Offline%20Ready-3b82f6?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-6366f1?style=flat-square)
 
-A production-grade, mobile-first **Micro-Frontend Super App Starter Template**, **Mini App Starter Kit**, and **Node.js CLI Scaffolder (`omni-mini-mfe`)** built with React 19, TypeScript, Tailwind CSS v4, Firebase Auth & Cloud Firestore, Express, and Workbox PWA.
+A production-grade, mobile-first **Micro-Frontend Super App Starter Template**, **Capacitor Android Mobile App (`com.omnimini.superapp`)**, **Mini App Starter Kit**, and **Node.js CLI Scaffolder (`omni-mini-mfe`)** built with React 19, TypeScript, Tailwind CSS v4, Capacitor 8, Firebase Auth & Cloud Firestore, Express, and Workbox PWA.
 
 ---
 
@@ -41,7 +42,40 @@ npx omni-mini-mfe create-mini-app --id acme-loyalty --name "Acme Loyalty Club"
 
 ---
 
-## 2. Using This Repo as a Super App Starter Template
+## 2. Native Android Mobile App Packaging (Capacitor APK & AAB)
+
+OmniMini is configured with **Capacitor 8** (`capacitor.config.ts`) to compile into a native **Android APK** and **Google Play Store AAB** with hardware bridge plugins (`@capacitor/haptics`, `@capacitor/status-bar`, `@capacitor/splash-screen`, `@capacitor/preferences`, `@capacitor/local-notifications`, `@capacitor/share`, `@capacitor/camera`, `@capacitor/app`).
+
+### Local Android Build Commands
+```bash
+# 1. Build web bundle and sync with Capacitor Android
+npm run mobile:build
+
+# 2. Build installable Android Debug APK (outputs to android/app/build/outputs/apk/debug/)
+npm run android:apk
+
+# 3. Build Google Play Store Release AAB (outputs to android/app/build/outputs/bundle/release/)
+npm run android:aab
+
+# 4. Open native Android project in Android Studio
+npm run cap:open:android
+```
+
+### Automated GitHub Actions Android APK & AAB Pipeline
+Every push to `main` (or manual dispatch in **Actions → Build Android APK & AAB**) runs `.github/workflows/android-build.yml`, which sets up JDK 21 and the Android SDK, syncs Capacitor, compiles the `.apk` and `.aab` binaries, and uploads them as downloadable workflow artifacts.
+
+### Native Mobile Hardware Bridge (`src/services/nativeBridgeService.ts`)
+All installed Mini Apps can access hardware capabilities via `sdk.device`:
+- `sdk.device.authenticateBiometrics(reason)` — Hardware Biometric / Passkey & Secure Vault PIN gate.
+- `sdk.device.scanQRCode()` — Camera viewfinder & `omnimini://pay` / `omnimini://app/<id>` QR scanner.
+- `sdk.device.capturePhoto()` — Native Capacitor Camera capture.
+- `sdk.device.scheduleNotification({ title, body, delaySeconds })` — Native Android Local Notifications.
+- `sdk.device.share({ title, text, url })` — Native OS Share Sheet.
+- `sdk.device.secureStorage` — Encrypted/encoded key-value storage via `@capacitor/preferences`.
+
+---
+
+## 3. Using This Repo as a Super App Starter Template
 
 Customize your Super App host brand, default theme, shared wallet currency, pre-installed mini apps, and sandboxed permissions in **`src/config/superAppStarter.config.ts`**:
 
@@ -76,7 +110,9 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
 ```text
 ├── .github/workflows/
 │   ├── ci.yml                          # PR quality, TypeScript & Firestore rules gate
-│   └── deploy-gh-pages.yml             # Automated GitHub Pages SPA + PWA deployment
+│   ├── deploy-gh-pages.yml             # Automated GitHub Pages SPA + PWA deployment
+│   └── android-build.yml               # Automated Capacitor Android APK & AAB build pipeline
+├── capacitor.config.ts                 # Capacitor Native Android/iOS runtime configuration
 ├── bin/
 │   ├── omni-mini-mfe.mjs               # Main Node.js CLI scaffolder
 │   ├── create-super-app.mjs            # Super App generator binary
@@ -89,10 +125,13 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
 │   ├── lib/
 │   │   └── firebase.ts                 # Firebase Auth & Cloud Firestore initialization
 │   ├── services/
+│   │   ├── nativeBridgeService.ts      # Capacitor Native Hardware & Deep-Link Bridge
 │   │   ├── firestoreService.ts         # Validated Firestore CRUD & real-time sync
 │   │   └── repositoryService.ts        # Hybrid Firestore + local offline Mini App registry
-│   ├── templates/
-│   │   └── miniAppStarter/             # Official Mini App Starter Template
+│   ├── components/
+│   │   ├── BiometricPromptModal.tsx    # Biometric & Secure Vault PIN Authentication Gate
+│   │   ├── QRScannerModal.tsx          # Live Camera QR Scanner & Wallet Receive QR Sheet
+│   │   └── IOSDeviceFrame.tsx          # Full-screen Mobile Shell with optional bezel toggle
 │   ├── sdk/
 │   │   └── createMiniAppSDK.ts         # Sandboxed Host-to-MiniApp Bridge SDK
 │   ├── context/
@@ -100,16 +139,16 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
 │   ├── miniapps/
 │   │   └── MiniAppContainer.tsx        # Sandboxed Mini App Runtime & Theme Controller
 │   └── pages/
-│       ├── HomePage.tsx                # iOS Springboard & Installed Mini Apps
+│       ├── HomePage.tsx                # Mobile Springboard & Installed Mini Apps
 │       ├── StorePage.tsx               # App Store, Category Bar, QR Scanner & Reviews
-│       ├── WalletPage.tsx              # Unified Super App Wallet & Ledger
+│       ├── WalletPage.tsx              # Unified Super App Wallet, QR Pay & Ledger
 │       ├── DeveloperPage.tsx           # Developer Console, Starter Kit Generator & Docs
-│       └── SettingsPage.tsx            # Host & Pluggable Mini App Settings
+│       └── SettingsPage.tsx            # Host, Native Bridge & Pluggable Mini App Settings
 ```
 
 ---
 
-## 3. Local Development Setup
+## 4. Local Development & GitHub Pages Deployment
 
 ```bash
 # 1. Install dependencies
@@ -124,21 +163,9 @@ npm run lint:rules
 npm run build
 ```
 
----
-
-## 4. GitHub Pages Deployment (CI/CD)
-
-This repository includes an automated GitHub Actions deployment pipeline in **`.github/workflows/deploy-gh-pages.yml`**.
-
-### Enable in Your GitHub Repository
+### Enable GitHub Pages in Your Repository
 1. Push this repository to GitHub (`main` branch).
-2. Navigate to **Settings → Pages** in your GitHub repository.
-3. Under **Build and deployment → Source**, select **GitHub Actions**.
-4. In the **Firebase Console → Authentication → Settings → Authorized domains**, add `<your-username>.github.io` so Google Sign-In popups work on your live GitHub Pages URL.
+2. Navigate to **Settings → Pages** in your GitHub repository and select **GitHub Actions** as the source.
+3. In the **Firebase Console → Authentication → Settings → Authorized domains**, ensure `<your-username>.github.io` is listed so Google Sign-In popups work on your live URL.
 
-### What Happens on Push to `main`
-- Runs strict TypeScript checks (`npm run lint`) and Firestore Security Rules linting (`npx eslint firestore.rules`).
-- Automatically injects your repository's base URL (`GITHUB_PAGES_BASE=/<repo-name>/`) into Vite and the Workbox PWA manifest.
-- Generates `dist/404.html` (SPA client-side routing fallback) and `dist/.nojekyll` via `npm run build:gh-pages`.
-- Deploys the `dist/` bundle directly to GitHub Pages via `actions/deploy-pages@v4`.
 

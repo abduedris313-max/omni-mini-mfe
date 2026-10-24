@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for converting the OmniMini Super App into a Capacitor-powered Android mobile application (APK/AAB) with a full-screen native mobile shell, hardware bridge APIs (Haptics, StatusBar, SplashScreen, Biometrics & Secure Storage, Camera/QR Scanner, Local/Push Notifications, Share & Deep Linking), extended MiniApp SDK, and automated Android build pipeline.",
+  "updatedAt":  "2026-10-24T16:17:13.348984613Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

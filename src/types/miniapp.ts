@@ -131,6 +131,33 @@ export interface MiniAppBridgeSDK {
   device: {
     hasPermission: (perm: MiniAppPermission) => boolean;
     requestPermission: (perm: MiniAppPermission) => Promise<boolean>;
+    getPlatformInfo: () => {
+      platform: 'android' | 'ios' | 'web';
+      isNative: boolean;
+      isStandalonePWA: boolean;
+    };
+    authenticateBiometrics: (reason?: string) => Promise<boolean>;
+    scanQRCode: () => Promise<{
+      rawValue: string;
+      type: 'payment' | 'miniapp' | 'url' | 'text';
+      recipient?: string;
+      amount?: number;
+      currency?: string;
+      note?: string;
+      miniAppId?: string;
+    } | null>;
+    capturePhoto: () => Promise<{ dataUrl: string; format: string } | null>;
+    share: (options: { title: string; text: string; url?: string }) => Promise<boolean>;
+    scheduleNotification: (options: {
+      title: string;
+      body: string;
+      delaySeconds?: number;
+    }) => Promise<boolean>;
+    secureStorage: {
+      getItem: (key: string) => Promise<string | null>;
+      setItem: (key: string, val: string) => Promise<void>;
+      removeItem: (key: string) => Promise<void>;
+    };
   };
   onStart: (callback: () => void) => () => void;
   onPause: (callback: () => void) => () => void;

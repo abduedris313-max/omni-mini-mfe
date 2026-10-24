@@ -1,5 +1,6 @@
 import { MiniAppBridgeSDK, MiniAppPermission } from '../types/miniapp';
 import { resolveMiniAppTheme } from '../theme/themeEngine';
+import { nativeBridgeService, QrScanPayload } from '../services/nativeBridgeService';
 
 const startListenersByApp: Record<string, Set<() => void>> = {};
 const pauseListenersByApp: Record<string, Set<() => void>> = {};
@@ -32,6 +33,8 @@ export function createMiniAppSDK(
     grantedPermissions: Record<string, string[]>;
     requestPermission: (appId: string, permission: string) => Promise<boolean>;
     requestConfirm: (title: string, message: string) => Promise<boolean>;
+    requestBiometricAuth?: (reason: string) => Promise<boolean>;
+    openQRScanner?: () => Promise<QrScanPayload | null>;
   }
 ): MiniAppBridgeSDK {
   const themeAPI = resolveMiniAppTheme(
@@ -211,6 +214,58 @@ export function createMiniAppSDK(
       },
       requestPermission: async (perm: MiniAppPermission) => {
         return context.requestPermission(appId, perm);
+      },
+      getPlatformInfo: () => {
+        const info = nativeBridgeService.getPlatformInfo();
+        return {
+          platform: info.platform,
+          isNative: info.isNative,
+          isStandalonePWA: info.isStandalonePWA,
+        };
+      },
+      authenticateBiometrics: async (reason = `Authorize action in ${appId}`) => {
+        const allowed = await context.requestPermission(appId, 'biometrics');
+        if (!allowed) return false;
+        if (context.requestBiometricAuth) {
+          return context.requestBiometricAuth(reason);
+        }
+        const res = await nativeBridgeService.verifyHardwareBiometrics();
+        return res.verified;
+      },
+      scanQRCode: async () => {
+        const allowed = await context.requestPermission(appId, 'camera');
+        if (!allowed) return null;
+        if (context.openQRScanner) {
+          return context.openQRScanner();
+        }
+        return null;
+      },
+      capturePhoto: async () => {
+        const allowed = await context.requestPermission(appId, 'camera');
+        if (!allowed) return null;
+        return nativeBridgeService.capturePhoto();
+      },
+      share: async (options) => {
+        const res = await nativeBridgeService.shareContent(options);
+        return res.shared;
+      },
+      scheduleNotification: async (options) => {
+        const allowed = await context.requestPermission(appId, 'notifications');
+        if (!allowed) return false;
+        const res = await nativeBridgeService.scheduleLocalNotification({
+          title: options.title,
+          body: options.body,
+          delaySeconds: options.delaySeconds,
+          extra: { appId },
+        });
+        return res.delivered;
+      },
+      secureStorage: {
+        getItem: (key: string) => nativeBridgeService.secureStorage.getItem(`${appId}_${key}`),
+        setItem: (key: string, val: string) =>
+          nativeBridgeService.secureStorage.setItem(`${appId}_${key}`, val),
+        removeItem: (key: string) =>
+          nativeBridgeService.secureStorage.removeItem(`${appId}_${key}`),
       },
     },
 

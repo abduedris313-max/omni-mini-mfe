@@ -20,6 +20,9 @@ import {
 } from '../theme/themeEngine';
 import { ThemeTokens } from '../theme/types';
 import { SUPER_APP_STARTER_CONFIG } from '../config/superAppStarter.config';
+import { nativeBridgeService, QrScanPayload } from '../services/nativeBridgeService';
+import { BiometricPromptModal } from '../components/BiometricPromptModal';
+import { QRScannerModal } from '../components/QRScannerModal';
 
 interface ToastItem {
   id: string;
@@ -77,11 +80,19 @@ interface SuperAppContextValue {
     appId: string
   ) => Promise<{ success: boolean; previousBalance: number; syncedBalance: number }>;
   topUpWallet: (amount: number) => void;
+  updateWalletTransaction: (
+    txId: string,
+    updates: { description: string; amount: number; type: 'debit' | 'credit' }
+  ) => Promise<boolean>;
+  deleteWalletTransaction: (txId: string) => Promise<boolean>;
 
   grantedPermissions: Record<string, string[]>;
   requestPermission: (appId: string, permission: string) => Promise<boolean>;
   revokePermission: (appId: string, permission: string) => void;
   requestConfirm: (title: string, message: string) => Promise<boolean>;
+  requestBiometricAuth: (reason?: string) => Promise<boolean>;
+  openQRScanner: (initialTab?: 'scan' | 'receive') => Promise<QrScanPayload | null>;
+  sendLocalNotification: (title: string, body: string, delaySeconds?: number) => Promise<void>;
 
   toasts: ToastItem[];
   showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -634,6 +645,97 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   };
 
+  const updateWalletTransaction = async (
+    txId: string,
+    updates: { description: string; amount: number; type: 'debit' | 'credit' }
+  ): Promise<boolean> => {
+    const existingTx = transactions.find((t) => t.id === txId);
+    if (!existingTx || !Number.isFinite(updates.amount) || updates.amount <= 0) {
+      return false;
+    }
+
+    const oldSigned = existingTx.type === 'credit' ? existingTx.amount : -existingTx.amount;
+    const newSigned = updates.type === 'credit' ? updates.amount : -updates.amount;
+    const netDelta = Number((newSigned - oldSigned).toFixed(2));
+    const nextBalance = Math.max(0, Number((walletBalance + netDelta).toFixed(2)));
+
+    setWalletBalance(nextBalance);
+    localStorage.setItem('omnimini_wallet_balance_v3', nextBalance.toString());
+
+    const updatedTx: WalletTransaction = {
+      ...existingTx,
+      description: updates.description.trim() || existingTx.description,
+      amount: Number(updates.amount.toFixed(2)),
+      type: updates.type,
+    };
+
+    setTransactions((prev) => {
+      const next = prev.map((t) => (t.id === txId ? updatedTx : t));
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
+      return next;
+    });
+
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, nextBalance).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService
+          .updateTransaction(uid, txId, {
+            amount: updatedTx.amount,
+            type: updatedTx.type,
+            description: updatedTx.description,
+          })
+          .catch(() => {});
+      }
+    }
+
+    showToast('Transaction updated and balance synced', 'success');
+    hapticFeedback('success');
+    return true;
+  };
+
+  const deleteWalletTransaction = async (txId: string): Promise<boolean> => {
+    const existingTx = transactions.find((t) => t.id === txId);
+    if (!existingTx) return false;
+
+    // Reverse the transaction's effect on walletBalance
+    const reverseDelta = existingTx.type === 'credit' ? -existingTx.amount : existingTx.amount;
+    const nextBalance = Math.max(0, Number((walletBalance + reverseDelta).toFixed(2)));
+
+    setWalletBalance(nextBalance);
+    localStorage.setItem('omnimini_wallet_balance_v3', nextBalance.toString());
+
+    setTransactions((prev) => {
+      const next = prev.filter((t) => t.id !== txId);
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
+      return next;
+    });
+
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, nextBalance).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: nextBalance });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService.deleteTransaction(uid, txId).catch(() => {});
+      }
+    }
+
+    showToast('Transaction deleted and balance adjusted', 'info');
+    hapticFeedback('medium');
+    return true;
+  };
+
   // 6. Centralized App Permissions Management
   const [grantedPermissions, setGrantedPermissions] = useState<Record<string, string[]>>(() => {
     try {
@@ -658,6 +760,16 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     resolve: (val: boolean) => void;
   } | null>(null);
 
+  const [biometricDialog, setBiometricDialog] = useState<{
+    reason: string;
+    resolve: (verified: boolean) => void;
+  } | null>(null);
+
+  const [qrScannerState, setQrScannerState] = useState<{
+    initialTab: 'scan' | 'receive';
+    resolve: (payload: QrScanPayload | null) => void;
+  } | null>(null);
+
   const requestConfirm = (title: string, message: string): Promise<boolean> => {
     hapticFeedback('medium');
     return new Promise((resolve) => {
@@ -669,6 +781,90 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
           resolve(val);
         },
       });
+    });
+  };
+
+  const requestBiometricAuth = (
+    reason = 'Verify your identity to authorize this action'
+  ): Promise<boolean> => {
+    hapticFeedback('medium');
+    return new Promise((resolve) => {
+      setBiometricDialog({
+        reason,
+        resolve: (verified: boolean) => {
+          setBiometricDialog(null);
+          if (verified) {
+            showToast('Biometric identity verified', 'success');
+          } else {
+            showToast('Biometric verification cancelled', 'warning');
+          }
+          resolve(verified);
+        },
+      });
+    });
+  };
+
+  const handleQrPayloadAction = async (payload: QrScanPayload) => {
+    if (payload.type === 'miniapp' && payload.miniAppId) {
+      openMiniApp(payload.miniAppId);
+      showToast(`Opened Mini App via Deep Link (${payload.miniAppId})`, 'info');
+      return;
+    }
+
+    if (payload.type === 'payment' && payload.amount && payload.amount > 0) {
+      const recipient = payload.recipient || 'OmniMini Merchant';
+      const approved = await requestConfirm(
+        'Confirm QR Payment',
+        `Pay $${payload.amount.toFixed(2)} to ${recipient} (${payload.note || 'QR Checkout'})?`
+      );
+      if (!approved) return;
+
+      if (settings.biometricAuth) {
+        const bioOk = await requestBiometricAuth(
+          `Authorize $${payload.amount.toFixed(2)} QR payment to ${recipient}`
+        );
+        if (!bioOk) return;
+      }
+
+      const paid = await deductWallet(
+        payload.amount,
+        `${recipient} · ${payload.note || 'QR Payment'}`,
+        'paypulse-wallet'
+      );
+      if (paid) {
+        await nativeBridgeService.scheduleLocalNotification({
+          title: 'Payment Sent via QR',
+          body: `You paid $${payload.amount.toFixed(2)} to ${recipient}.`,
+          delaySeconds: 1,
+        });
+      }
+      return;
+    }
+
+    showToast(`Scanned QR: ${payload.rawValue}`, 'info');
+  };
+
+  const openQRScanner = (initialTab: 'scan' | 'receive' = 'scan'): Promise<QrScanPayload | null> => {
+    hapticFeedback('light');
+    return new Promise((resolve) => {
+      setQrScannerState({
+        initialTab,
+        resolve: (payload) => {
+          setQrScannerState(null);
+          if (payload) {
+            handleQrPayloadAction(payload);
+          }
+          resolve(payload);
+        },
+      });
+    });
+  };
+
+  const sendLocalNotification = async (title: string, body: string, delaySeconds = 1) => {
+    await nativeBridgeService.scheduleLocalNotification({
+      title,
+      body,
+      delaySeconds,
     });
   };
 
@@ -716,12 +912,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const hapticFeedback = (pattern: 'light' | 'medium' | 'heavy' | 'success' = 'light') => {
     if (!settings.hapticsEnabled) return;
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      if (pattern === 'light') navigator.vibrate(12);
-      else if (pattern === 'medium') navigator.vibrate(25);
-      else if (pattern === 'heavy') navigator.vibrate(45);
-      else if (pattern === 'success') navigator.vibrate([15, 40, 20]);
-    }
+    nativeBridgeService.triggerHaptics(pattern).catch(() => {});
   };
 
   // 8. Repository sync
@@ -773,6 +964,15 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       });
     }
 
+    // Synchronize Native Capacitor StatusBar & theme-color meta tag
+    nativeBridgeService
+      .syncStatusBar({
+        isDark,
+        backgroundColor: themeTokens.bgBase,
+        visible: settings.showStatusBar !== false,
+      })
+      .catch(() => {});
+
     // Broadcast to mini app event listeners
     availableApps.forEach((app) => {
       try {
@@ -783,6 +983,54 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     });
   }, [settings, isDark, themeTokens, availableApps]);
+
+  // Dismiss native Capacitor splash screen & register Android hardware back button + deep links
+  useEffect(() => {
+    nativeBridgeService.hideSplashScreen().catch(() => {});
+
+    const handleLocalNotificationBanner = (e: Event) => {
+      const detail = (e as CustomEvent<{ title: string; body: string }>).detail;
+      if (detail?.title) {
+        showToast(`${detail.title}: ${detail.body}`, 'info');
+        hapticFeedback('success');
+      }
+    };
+    window.addEventListener('omnimini:local-notification', handleLocalNotificationBanner);
+
+    const cleanupMobileListeners = nativeBridgeService.registerMobileLifecycleListeners({
+      onHardwareBackButton: () => {
+        if (qrScannerState) {
+          setQrScannerState(null);
+          return true;
+        }
+        if (biometricDialog) {
+          biometricDialog.resolve(false);
+          return true;
+        }
+        if (confirmDialog) {
+          confirmDialog.resolve(false);
+          return true;
+        }
+        if (activeMiniAppId) {
+          closeMiniApp();
+          return true;
+        }
+        if (currentTab !== 'home') {
+          setCurrentTab('home');
+          return true;
+        }
+        return false;
+      },
+      onDeepLink: (payload) => {
+        handleQrPayloadAction(payload);
+      },
+    });
+
+    return () => {
+      window.removeEventListener('omnimini:local-notification', handleLocalNotificationBanner);
+      cleanupMobileListeners();
+    };
+  }, [activeMiniAppId, currentTab, qrScannerState, biometricDialog, confirmDialog]);
 
   // 9. First Time User Setup Wizard
   const [isSetupWizardOpen, setIsSetupWizardOpen] = useState<boolean>(() => {
@@ -1036,10 +1284,15 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         creditWallet,
         syncSharedWalletBalance,
         topUpWallet,
+        updateWalletTransaction,
+        deleteWalletTransaction,
         grantedPermissions,
         requestPermission,
         revokePermission,
         requestConfirm,
+        requestBiometricAuth,
+        openQRScanner,
+        sendLocalNotification,
         toasts,
         showToast,
         hapticFeedback,
@@ -1055,6 +1308,25 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
       }}
     >
       {children}
+
+      {/* Native Biometric & Vault PIN Security Gate */}
+      <BiometricPromptModal
+        isOpen={!!biometricDialog}
+        reason={biometricDialog?.reason || 'Authenticate with Biometrics'}
+        themeTokens={themeTokens}
+        onResolve={(verified) => biometricDialog?.resolve(verified)}
+      />
+
+      {/* Native Camera & QR Code Scanner / Receive QR Sheet */}
+      <QRScannerModal
+        isOpen={!!qrScannerState}
+        initialTab={qrScannerState?.initialTab || 'scan'}
+        userName={user?.name || 'OmniMini User'}
+        walletBalance={walletBalance}
+        themeTokens={themeTokens}
+        onClose={() => qrScannerState?.resolve(null)}
+        onScanComplete={(payload) => qrScannerState?.resolve(payload)}
+      />
 
       {/* In-app iOS style Confirmation Dialog */}
       {confirmDialog && (

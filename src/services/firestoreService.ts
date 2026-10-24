@@ -5,6 +5,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   onSnapshot,
@@ -258,6 +259,50 @@ export const firestoreService = {
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
+  /**
+   * Updates an existing wallet transaction in `/users/{uid}/transactions/{txId}`
+   */
+  async updateTransaction(
+    uid: string,
+    txId: string,
+    updates: { amount: number; type: 'debit' | 'credit'; description: string; timestamp?: string }
+  ): Promise<void> {
+    if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+    const safeUserId = sanitizeId(uid, 'usr');
+    const safeTxId = sanitizeId(txId, 'tx');
+    const path = `users/${safeUserId}/transactions/${safeTxId}`;
+
+    try {
+      const ref = doc(db, 'users', safeUserId, 'transactions', safeTxId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      await updateDoc(ref, {
+        amount: Math.max(0.01, Math.min(1000000, Number(updates.amount.toFixed(2)))),
+        type: updates.type === 'debit' ? 'debit' : 'credit',
+        description: (updates.description || 'Wallet Transaction').trim().slice(0, MAX_DESCRIPTION_LENGTH),
+        ...(updates.timestamp ? { timestamp: updates.timestamp.slice(0, 64) } : {}),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  /**
+   * Deletes a wallet transaction from `/users/{uid}/transactions/{txId}`
+   */
+  async deleteTransaction(uid: string, txId: string): Promise<void> {
+    if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+    const safeUserId = sanitizeId(uid, 'usr');
+    const safeTxId = sanitizeId(txId, 'tx');
+    const path = `users/${safeUserId}/transactions/${safeTxId}`;
+
+    try {
+      await deleteDoc(doc(db, 'users', safeUserId, 'transactions', safeTxId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
     }
   },
 
