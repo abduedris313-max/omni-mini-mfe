@@ -23,6 +23,12 @@ export function createMiniAppSDK(
     hapticFeedback: (pattern?: any) => void;
     walletBalance: number;
     deductWallet: (amount: number, description: string, appId: string) => Promise<boolean>;
+    creditWallet?: (amount: number, description: string, appId: string) => Promise<boolean>;
+    syncSharedWalletBalance?: (
+      newBalance: number,
+      description: string,
+      appId: string
+    ) => Promise<{ success: boolean; previousBalance: number; syncedBalance: number }>;
     grantedPermissions: Record<string, string[]>;
     requestPermission: (appId: string, permission: string) => Promise<boolean>;
     requestConfirm: (title: string, message: string) => Promise<boolean>;
@@ -175,6 +181,26 @@ export function createMiniAppSDK(
           return { success: true, txId: `tx-${Date.now()}` };
         }
         return { success: false, error: 'Payment declined or insufficient balance' };
+      },
+      credit: async (amount: number, description: string) => {
+        if (context.creditWallet) {
+          const ok = await context.creditWallet(amount, description, appId);
+          if (ok) {
+            return { success: true, txId: `tx-${Date.now()}` };
+          }
+        }
+        return { success: false, error: 'Credit declined' };
+      },
+      syncSharedBalance: async (newBalance: number, description = 'FinTrack Shared Balance Sync') => {
+        if (context.syncSharedWalletBalance) {
+          const res = await context.syncSharedWalletBalance(newBalance, description, appId);
+          return { ...res, txId: `tx-sync-${Date.now()}` };
+        }
+        return {
+          success: false,
+          previousBalance: context.walletBalance,
+          syncedBalance: context.walletBalance,
+        };
       },
     },
 

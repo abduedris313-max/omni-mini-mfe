@@ -59,6 +59,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     lastVerifiedAt,
     isPrewarming,
     prewarmOfflineCache,
+    setOfflineViewOpen,
+    cachedMiniApps,
   } = useServiceWorker();
 
   const [expandedAppId, setExpandedAppId] = useState<string | null>('paypulse-wallet');
@@ -975,6 +977,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
             >
               <HardDriveDownload className="w-3.5 h-3.5" />
               <span>{isPrewarming ? 'Caching Offline Bundle...' : 'Verify & Pre-cache Offline Bundle'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                hapticFeedback('light');
+                setOfflineViewOpen(true);
+              }}
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+                color: themeTokens.textPrimary,
+              }}
+              className="py-2.5 px-3 rounded-xl border text-xs font-semibold transition flex items-center justify-center gap-1.5 ios-active"
+            >
+              <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+              <span>Offline View ({cachedMiniApps.length})</span>
             </button>
 
             {pendingSyncCount > 0 && isOnline && (

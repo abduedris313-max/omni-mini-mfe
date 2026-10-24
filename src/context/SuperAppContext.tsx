@@ -9,6 +9,7 @@ import {
 import { repositoryService } from '../services/repositoryService';
 import { firestoreService } from '../services/firestoreService';
 import { offlineSyncService } from '../services/offlineSyncService';
+import { runBackgroundIndexedDbSync, BackgroundSyncResult } from '../hooks/useServiceWorker';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { auth, googleProvider } from '../lib/firebase';
 import {
@@ -69,6 +70,12 @@ interface SuperAppContextValue {
   walletBalance: number;
   transactions: WalletTransaction[];
   deductWallet: (amount: number, description: string, appId: string) => Promise<boolean>;
+  creditWallet: (amount: number, description: string, appId: string) => Promise<boolean>;
+  syncSharedWalletBalance: (
+    newBalance: number,
+    description: string,
+    appId: string
+  ) => Promise<{ success: boolean; previousBalance: number; syncedBalance: number }>;
   topUpWallet: (amount: number) => void;
 
   grantedPermissions: Record<string, string[]>;
@@ -123,9 +130,9 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
       etbPerUsdRate: 122,
     },
     'fintrack-budget': {
-      monthlyBudgetLimit: 2500,
+      monthlyBudgetLimit: 45000,
       alertThresholdPercent: 80,
-      currencySymbol: '$',
+      currencySymbol: 'ETB',
       privacyMaskDefault: false,
     },
     'paypulse-wallet': {
@@ -492,6 +499,141 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     hapticFeedback('success');
   };
 
+  const creditWallet = async (
+    amount: number,
+    description: string,
+    appId: string
+  ): Promise<boolean> => {
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    const newBal = Number((walletBalance + amount).toFixed(2));
+    setWalletBalance(newBal);
+    localStorage.setItem('omnimini_wallet_balance_v3', newBal.toString());
+
+    const newTx: WalletTransaction = {
+      id: `tx-${Date.now()}`,
+      appId,
+      appName: availableApps.find((a) => a.id === appId)?.name || appId,
+      amount,
+      type: 'credit',
+      description,
+      timestamp: new Date().toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    };
+
+    setTransactions((prev) => {
+      const next = [newTx, ...prev];
+      localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
+      return next;
+    });
+
+    if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      const txPayload = {
+        ...newTx,
+        userId: uid,
+        status: 'completed' as const,
+      };
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: newBal });
+        offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, newBal).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: newBal });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+        firestoreService.recordTransaction(txPayload).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+      }
+    }
+
+    showToast(`+$${amount.toFixed(2)} synced to Super App Wallet`, 'success');
+    hapticFeedback('success');
+    return true;
+  };
+
+  const syncSharedWalletBalance = async (
+    newBalance: number,
+    description: string,
+    appId: string
+  ): Promise<{ success: boolean; previousBalance: number; syncedBalance: number }> => {
+    const cleanBalance = Math.max(0, Number(newBalance.toFixed(2)));
+    const prevBalance = walletBalance;
+    const delta = Number((cleanBalance - prevBalance).toFixed(2));
+
+    setWalletBalance(cleanBalance);
+    localStorage.setItem('omnimini_wallet_balance_v3', cleanBalance.toString());
+
+    if (Math.abs(delta) >= 0.01) {
+      const newTx: WalletTransaction = {
+        id: `tx-sync-${Date.now()}`,
+        appId,
+        appName: availableApps.find((a) => a.id === appId)?.name || appId,
+        amount: Math.abs(delta),
+        type: delta >= 0 ? 'credit' : 'debit',
+        description,
+        timestamp: new Date().toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      };
+
+      setTransactions((prev) => {
+        const next = [newTx, ...prev];
+        localStorage.setItem('omnimini_transactions_v3', JSON.stringify(next));
+        return next;
+      });
+
+      if (auth.currentUser) {
+        const uid = auth.currentUser.uid;
+        const txPayload = {
+          ...newTx,
+          userId: uid,
+          status: 'completed' as const,
+        };
+        if (!navigator.onLine) {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: cleanBalance });
+          offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        } else {
+          firestoreService.updateWalletBalance(uid, cleanBalance).catch(() => {
+            offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: cleanBalance });
+            setPendingSyncCount(offlineSyncService.getPendingCount());
+          });
+          firestoreService.recordTransaction(txPayload).catch(() => {
+            offlineSyncService.enqueue({ type: 'wallet_transaction', tx: txPayload });
+            setPendingSyncCount(offlineSyncService.getPendingCount());
+          });
+        }
+      }
+    } else if (auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      if (!navigator.onLine) {
+        offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: cleanBalance });
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      } else {
+        firestoreService.updateWalletBalance(uid, cleanBalance).catch(() => {
+          offlineSyncService.enqueue({ type: 'wallet_balance', uid, balance: cleanBalance });
+          setPendingSyncCount(offlineSyncService.getPendingCount());
+        });
+      }
+    }
+
+    return {
+      success: true,
+      previousBalance: prevBalance,
+      syncedBalance: cleanBalance,
+    };
+  };
+
   // 6. Centralized App Permissions Management
   const [grantedPermissions, setGrantedPermissions] = useState<Record<string, string[]>>(() => {
     try {
@@ -818,18 +960,46 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, []);
 
   const syncOfflineQueue = async () => {
-    const { synced, remaining } = await offlineSyncService.flushQueue();
-    setPendingSyncCount(remaining);
-    if (synced > 0) {
-      showToast(`Synced ${synced} offline ${synced === 1 ? 'action' : 'actions'} to cloud`, 'success');
+    const result = await runBackgroundIndexedDbSync('manual-sync');
+    setPendingSyncCount(result.remainingCount);
+    if (result.syncedCount > 0) {
+      showToast(
+        `Synced ${result.syncedCount} IndexedDB ${result.syncedCount === 1 ? 'mutation' : 'mutations'} to server`,
+        'success'
+      );
     }
   };
 
   useEffect(() => {
-    if (isOnline && offlineSyncService.getPendingCount() > 0) {
-      syncOfflineQueue();
-    }
-  }, [isOnline]);
+    const handleQueueUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<{ pendingCount: number }>).detail;
+      if (typeof detail?.pendingCount === 'number') {
+        setPendingSyncCount(detail.pendingCount);
+      } else {
+        setPendingSyncCount(offlineSyncService.getPendingCount());
+      }
+    };
+
+    const handleSyncComplete = (e: Event) => {
+      const result = (e as CustomEvent<BackgroundSyncResult>).detail;
+      if (result) {
+        setPendingSyncCount(result.remainingCount);
+        if (result.syncedCount > 0 && result.trigger !== 'manual-sync') {
+          showToast(
+            `Background sync pushed ${result.syncedCount} IndexedDB ${result.syncedCount === 1 ? 'change' : 'changes'}`,
+            'success'
+          );
+        }
+      }
+    };
+
+    window.addEventListener('omnimini:idb-sync-updated', handleQueueUpdate);
+    window.addEventListener('omnimini:background-sync-complete', handleSyncComplete);
+    return () => {
+      window.removeEventListener('omnimini:idb-sync-updated', handleQueueUpdate);
+      window.removeEventListener('omnimini:background-sync-complete', handleSyncComplete);
+    };
+  }, []);
 
   useEffect(() => {
     refreshApps();
@@ -863,6 +1033,8 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         walletBalance,
         transactions,
         deductWallet,
+        creditWallet,
+        syncSharedWalletBalance,
         topUpWallet,
         grantedPermissions,
         requestPermission,

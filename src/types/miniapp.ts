@@ -122,6 +122,11 @@ export interface MiniAppBridgeSDK {
   payment: {
     getBalance: () => number;
     pay: (amount: number, description: string) => Promise<{ success: boolean; txId?: string; error?: string }>;
+    credit: (amount: number, description: string) => Promise<{ success: boolean; txId?: string; error?: string }>;
+    syncSharedBalance: (
+      newBalance: number,
+      description?: string
+    ) => Promise<{ success: boolean; txId?: string; previousBalance: number; syncedBalance: number }>;
   };
   device: {
     hasPermission: (perm: MiniAppPermission) => boolean;

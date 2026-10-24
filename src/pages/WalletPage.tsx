@@ -6,6 +6,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   ShieldCheck,
+  PieChart,
+  Landmark,
 } from 'lucide-react';
 
 export const WalletPage: React.FC = () => {
@@ -13,6 +15,7 @@ export const WalletPage: React.FC = () => {
     walletBalance,
     transactions,
     topUpWallet,
+    openMiniApp,
     grantedPermissions,
     revokePermission,
     availableApps,
@@ -23,6 +26,16 @@ export const WalletPage: React.FC = () => {
 
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
+
+  // Read FinTrack shared balance metadata if synced
+  const finTrackSharedSummary = (() => {
+    try {
+      const raw = localStorage.getItem('miniapp_store_fintrack-budget_fintrack_shared_wallet_summary');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
 
   const handleTopUpConfirm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +85,22 @@ export const WalletPage: React.FC = () => {
             <span className="text-[10px] font-bold uppercase tracking-wider opacity-90">
               Unified Super App Balance
             </span>
-            <div className="text-3xl font-extrabold tracking-tight">${walletBalance.toFixed(2)}</div>
+            <div className="text-3xl font-extrabold tracking-tight tabular-nums">
+              {finTrackSharedSummary?.baseCurrency === 'ETB'
+                ? `ETB ${walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : `$${walletBalance.toFixed(2)}`}
+            </div>
+            {finTrackSharedSummary && (
+              <div className="text-[11px] opacity-90 tabular-nums">
+                Synced from FinTrack ({finTrackSharedSummary.sharedAccountsCount} shared{' '}
+                {finTrackSharedSummary.sharedAccountsCount === 1 ? 'account' : 'accounts'} · ETB{' '}
+                {Number(finTrackSharedSummary.totalInEtb || 0).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+                )
+              </div>
+            )}
           </div>
           <div className="p-2.5 rounded-2xl bg-white/20 backdrop-blur-md">
             <Wallet className="w-5 h-5 text-white" />
@@ -90,8 +118,58 @@ export const WalletPage: React.FC = () => {
             <Plus className="w-3.5 h-3.5" />
             <span>Top Up Balance</span>
           </button>
+          <button
+            onClick={() => {
+              openMiniApp('fintrack-budget');
+              hapticFeedback('light');
+            }}
+            className="flex-1 py-2.5 rounded-xl bg-black/25 text-white font-bold text-xs hover:bg-black/35 transition flex items-center justify-center gap-1.5 ios-active"
+          >
+            <Landmark className="w-3.5 h-3.5" />
+            <span>FinTrack Accounts</span>
+          </button>
         </div>
       </div>
+
+      {/* FinTrack Shared Multi-Account Summary Card */}
+      {finTrackSharedSummary && (
+        <div
+          style={{
+            backgroundColor: themeTokens.bgCard,
+            borderColor: themeTokens.borderDefault,
+          }}
+          className="p-4 rounded-2xl border flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
+              <PieChart className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold truncate" style={{ color: themeTokens.textPrimary }}>
+                FinTrack Shared Bank & Wallet Bridge
+              </h4>
+              <p className="text-[11px] truncate" style={{ color: themeTokens.textSecondary }}>
+                {Array.isArray(finTrackSharedSummary.accountNames) &&
+                finTrackSharedSummary.accountNames.length > 0
+                  ? finTrackSharedSummary.accountNames.join(' · ')
+                  : 'No shared accounts selected'}
+              </p>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-xs font-extrabold tabular-nums text-teal-400">
+              ETB{' '}
+              {Number(finTrackSharedSummary.totalInEtb || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <div className="text-[10px]" style={{ color: themeTokens.textMuted }}>
+              {finTrackSharedSummary.sharedAccountsCount} linked
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cross-Mini-App Transaction Feed */}
       <div className="space-y-3">

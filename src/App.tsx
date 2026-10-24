@@ -3,6 +3,7 @@ import { SuperAppProvider, useSuperApp } from './context/SuperAppContext';
 import { IOSDeviceFrame } from './components/IOSDeviceFrame';
 import { BottomNavBar } from './components/BottomNavBar';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { OfflineView } from './components/OfflineView';
 import { MiniAppContainer } from './miniapps/MiniAppContainer';
 import { HomePage } from './pages/HomePage';
 import { StorePage } from './pages/StorePage';
@@ -64,6 +65,7 @@ const SuperAppContent: React.FC = () => {
 
       <IOSDeviceFrame>
         {renderActivePage()}
+        <OfflineView />
         <BottomNavBar />
         <MiniAppContainer />
         <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
