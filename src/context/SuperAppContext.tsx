@@ -11,7 +11,7 @@ import { firestoreService } from '../services/firestoreService';
 import { offlineSyncService } from '../services/offlineSyncService';
 import { runBackgroundIndexedDbSync, BackgroundSyncResult } from '../hooks/useServiceWorker';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { auth, googleProvider } from '../lib/firebase';
+import { auth, googleProvider, browserPopupRedirectResolver } from '../lib/firebase';
 import {
   resolveSuperAppTheme,
   superAppTokensToCSSVariables,

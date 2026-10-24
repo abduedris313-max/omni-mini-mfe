@@ -3,6 +3,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { MiniAppManifest } from '../types/miniapp';
 import { INITIAL_MINI_APPS } from '../data/seedMiniApps';
 import { offlineSyncService, OfflineMutationInput } from '../services/offlineSyncService';
+import { isStaticHostEnvironment } from '../lib/firebase';
 
 export interface BackgroundSyncResult {
   syncedCount: number;
@@ -490,17 +491,25 @@ export function useServiceWorker() {
       // Warm API cache or seed with local mini-apps manifest snapshot for offline access
       try {
         const apiCache = await window.caches.open('omnimini-api-cache');
-        try {
-          const apiRes = await fetch('/api/miniapps');
-          if (apiRes.ok) {
-            await apiCache.put('/api/miniapps', apiRes.clone());
-          }
-        } catch {
+        if (isStaticHostEnvironment()) {
           const fallbackApps = loadLocalCachedMiniApps();
           const syntheticResponse = new Response(JSON.stringify(fallbackApps), {
             headers: { 'Content-Type': 'application/json' },
           });
           await apiCache.put('/api/miniapps', syntheticResponse);
+        } else {
+          try {
+            const apiRes = await fetch('/api/miniapps');
+            if (apiRes.ok) {
+              await apiCache.put('/api/miniapps', apiRes.clone());
+            }
+          } catch {
+            const fallbackApps = loadLocalCachedMiniApps();
+            const syntheticResponse = new Response(JSON.stringify(fallbackApps), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+            await apiCache.put('/api/miniapps', syntheticResponse);
+          }
         }
       } catch {
         // Ignore if Cache API is restricted

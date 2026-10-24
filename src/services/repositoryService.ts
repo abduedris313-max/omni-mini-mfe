@@ -1,7 +1,7 @@
 import { INITIAL_MINI_APPS, INITIAL_REVIEWS } from '../data/seedMiniApps';
 import { MiniAppManifest, MiniAppReview, SuperAppUser } from '../types/miniapp';
 import { firestoreService } from './firestoreService';
-import { auth } from '../lib/firebase';
+import { auth, isStaticHostEnvironment } from '../lib/firebase';
 
 const STORAGE_KEY_APPS = 'omnimini_apps_repo_v3';
 const STORAGE_KEY_REVIEWS = 'omnimini_reviews_repo_v3';
@@ -57,28 +57,30 @@ function mergeApps(baseApps: MiniAppManifest[], firestoreApps: MiniAppManifest[]
 export const repositoryService = {
   async getMiniApps(category?: string, search?: string): Promise<MiniAppManifest[]> {
     let firestoreApps: MiniAppManifest[] = [];
-    try {
-      firestoreApps = await firestoreService.getPublishedMiniApps();
-    } catch (e) {
-      console.warn('Firestore miniapps read fallback:', e);
-    }
-
-    try {
-      const params = new URLSearchParams();
-      if (category && category !== 'all') params.append('category', category);
-      if (search) params.append('search', search);
-
-      const res = await fetch(`/api/miniapps?${params.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          const merged = mergeApps(json.data, firestoreApps);
-          saveLocalApps(merged);
-          return merged;
-        }
+    if (!isStaticHostEnvironment()) {
+      try {
+        firestoreApps = await firestoreService.getPublishedMiniApps();
+      } catch {
+        // Fallback silently to local repository
       }
-    } catch (e) {
-      console.warn('Offline or API unreachable, serving cached repository', e);
+
+      try {
+        const params = new URLSearchParams();
+        if (category && category !== 'all') params.append('category', category);
+        if (search) params.append('search', search);
+
+        const res = await fetch(`/api/miniapps?${params.toString()}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            const merged = mergeApps(json.data, firestoreApps);
+            saveLocalApps(merged);
+            return merged;
+          }
+        }
+      } catch {
+        // Offline or static host, use local cached repository
+      }
     }
 
     // Local fallback merged with Firestore
@@ -99,19 +101,21 @@ export const repositoryService = {
   },
 
   async getMiniAppById(id: string): Promise<{ app: MiniAppManifest; reviews: MiniAppReview[] } | null> {
-    try {
-      const res = await fetch(`/api/miniapps/${id}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          return {
-            app: json.data,
-            reviews: json.data.reviews || [],
-          };
+    if (!isStaticHostEnvironment()) {
+      try {
+        const res = await fetch(`/api/miniapps/${id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            return {
+              app: json.data,
+              reviews: json.data.reviews || [],
+            };
+          }
         }
+      } catch {
+        // Fallback to local
       }
-    } catch (e) {
-      console.warn('Offline or API unreachable for app detail', e);
     }
 
     const apps = getLocalApps();
@@ -125,20 +129,22 @@ export const repositoryService = {
 
   async publishMiniApp(payload: any): Promise<MiniAppManifest> {
     let publishedManifest: MiniAppManifest | null = null;
-    try {
-      const res = await fetch('/api/miniapps/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          publishedManifest = json.data;
+    if (!isStaticHostEnvironment()) {
+      try {
+        const res = await fetch('/api/miniapps/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            publishedManifest = json.data;
+          }
         }
+      } catch {
+        // Fallback to local repository
       }
-    } catch (e) {
-      console.warn('Publish API unreachable, committing to local repository', e);
     }
 
     if (!publishedManifest) {
@@ -191,7 +197,7 @@ export const repositoryService = {
   },
 
   async updateVersion(id: string, newVersion: string, releaseNotes: string, schema?: any): Promise<MiniAppManifest | null> {
-    if (auth.currentUser && auth.currentUser.emailVerified) {
+    if (auth.currentUser && auth.currentUser.emailVerified && !isStaticHostEnvironment()) {
       try {
         await firestoreService.updateMiniAppVersionInFirestore(id, newVersion, releaseNotes);
       } catch (e) {
@@ -199,26 +205,28 @@ export const repositoryService = {
       }
     }
 
-    try {
-      const res = await fetch(`/api/miniapps/${id}/version`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newVersion, releaseNotes, pluggableSettingsSchema: schema }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          const apps = getLocalApps();
-          const idx = apps.findIndex((a) => a.id === id);
-          if (idx >= 0) {
-            apps[idx] = json.data;
-            saveLocalApps(apps);
+    if (!isStaticHostEnvironment()) {
+      try {
+        const res = await fetch(`/api/miniapps/${id}/version`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newVersion, releaseNotes, pluggableSettingsSchema: schema }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            const apps = getLocalApps();
+            const idx = apps.findIndex((a) => a.id === id);
+            if (idx >= 0) {
+              apps[idx] = json.data;
+              saveLocalApps(apps);
+            }
+            return json.data;
           }
-          return json.data;
         }
+      } catch {
+        // Fallback to local
       }
-    } catch (e) {
-      console.warn('Update version API unreachable, updating locally', e);
     }
 
     const apps = getLocalApps();
@@ -233,20 +241,22 @@ export const repositoryService = {
   },
 
   async addReview(appId: string, userName: string, rating: number, comment: string): Promise<MiniAppReview> {
-    try {
-      const res = await fetch(`/api/miniapps/${appId}/reviews`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName, rating, comment }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          return json.data;
+    if (!isStaticHostEnvironment()) {
+      try {
+        const res = await fetch(`/api/miniapps/${appId}/reviews`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userName, rating, comment }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            return json.data;
+          }
         }
+      } catch {
+        // Fallback to local
       }
-    } catch (e) {
-      console.warn('Review API unreachable, saving locally', e);
     }
 
     const review: MiniAppReview = {
@@ -276,14 +286,16 @@ export const repositoryService = {
   },
 
   async getTelemetry(): Promise<any> {
-    try {
-      const res = await fetch('/api/developer/analytics');
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) return json.data;
+    if (!isStaticHostEnvironment()) {
+      try {
+        const res = await fetch('/api/developer/analytics');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) return json.data;
+        }
+      } catch {
+        // Fallback to local
       }
-    } catch (e) {
-      console.warn('Telemetry API unreachable', e);
     }
 
     const apps = getLocalApps();
@@ -307,18 +319,20 @@ export const repositoryService = {
   },
 
   async authenticateGoogle(googleData?: Partial<SuperAppUser>): Promise<SuperAppUser> {
-    try {
-      const res = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(googleData || {}),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.user) return json.user;
+    if (!isStaticHostEnvironment()) {
+      try {
+        const res = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(googleData || {}),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.user) return json.user;
+        }
+      } catch {
+        // Fallback to local
       }
-    } catch (e) {
-      console.warn('Google Auth API unreachable, generating local session', e);
     }
 
     const email = (googleData?.email || '').trim();
@@ -336,3 +350,4 @@ export const repositoryService = {
     };
   },
 };
+
