@@ -84,6 +84,9 @@ export interface FinTrackEntry {
   accountId?: string;
   accountName?: string;
   transferToAccountId?: string;
+  loanId?: string;
+  loanEntryKind?: 'principal' | 'repayment';
+  goalId?: string;
   date: string;
   settledViaWallet?: boolean;
 }
@@ -381,13 +384,6 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [txDate, setTxDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [chargeSuperAppWallet, setChargeSuperAppWallet] = useState(false);
 
-  // Automatically default txAccountId to the primary account when accounts exist
-  useEffect(() => {
-    if (!editingTxId && !txAccountId && accounts.length > 0) {
-      setTxAccountId(accounts[0].id);
-    }
-  }, [accounts, editingTxId, txAccountId]);
-
   // 5. Loan Providers (P2P & B2C) and Loan Tracking State
   const [loanProviders, setLoanProviders] = useState<LoanProvider[]>(() => {
     const saved = sdk.storage.getItem('fintrack_loan_providers_v3');
@@ -403,9 +399,10 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [providerTypeFilter, setProviderTypeFilter] = useState<'ALL' | 'B2C' | 'P2P'>('ALL');
   const [showAddProviderForm, setShowAddProviderForm] = useState(false);
   const [showAddLoanForm, setShowAddLoanForm] = useState(false);
+  const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
   const [repayLoanTarget, setRepayLoanTarget] = useState<FinTrackLoan | null>(null);
   const [repayAmount, setRepayAmount] = useState('');
-  const [repayAccountId, setRepayAccountId] = useState('');
+  const [repayAccountId, setRepayAccountId] = useState(() => accounts[0]?.id || '');
 
   // New Provider Form
   const [provName, setProvName] = useState('');
@@ -415,14 +412,14 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [provCurrency, setProvCurrency] = useState<CurrencyCode>('ETB');
   const [provContact, setProvContact] = useState('');
 
-  // New Loan Form
+  // New / Edit Loan Form
   const [loanTitle, setLoanTitle] = useState('');
   const [loanProviderId, setLoanProviderId] = useState('');
   const [loanDirection, setLoanDirection] = useState<'borrowed' | 'lent'>('borrowed');
   const [loanPrincipal, setLoanPrincipal] = useState('');
   const [loanInterest, setLoanInterest] = useState('10');
   const [loanCurrency, setLoanCurrency] = useState<CurrencyCode>('ETB');
-  const [loanAccountId, setLoanAccountId] = useState('');
+  const [loanAccountId, setLoanAccountId] = useState(() => accounts[0]?.id || '');
   const [loanDueDate, setLoanDueDate] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() + 1);
@@ -446,9 +443,28 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [schedCategory, setSchedCategory] = useState<FinTrackCategory>('Housing');
   const [schedFreq, setSchedFreq] = useState<ScheduleFrequency>('monthly');
   const [schedNextDate, setSchedNextDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [schedAccountId, setSchedAccountId] = useState('');
+  const [schedAccountId, setSchedAccountId] = useState(() => accounts[0]?.id || '');
   const [schedAutoExecute, setSchedAutoExecute] = useState(true);
   const [schedSyncSuperApp, setSchedSyncSuperApp] = useState(false);
+
+  // Automatically default txAccountId, loanAccountId, and schedAccountId to the primary account when accounts exist
+  useEffect(() => {
+    if (accounts.length > 0) {
+      const primaryId = accounts[0].id;
+      if (!editingTxId && !txAccountId) {
+        setTxAccountId(primaryId);
+      }
+      if (!editingLoanId && !loanAccountId) {
+        setLoanAccountId(primaryId);
+      }
+      if (!schedAccountId) {
+        setSchedAccountId(primaryId);
+      }
+      if (!repayAccountId) {
+        setRepayAccountId(primaryId);
+      }
+    }
+  }, [accounts, editingTxId, editingLoanId, txAccountId, loanAccountId, schedAccountId, repayAccountId]);
 
   // 7. Savings Goals State
   const [goals, setGoals] = useState<SavingsGoal[]>(() => {
@@ -464,6 +480,112 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [newGoalName, setNewGoalName] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('');
   const [newGoalCurrency, setNewGoalCurrency] = useState<CurrencyCode>('ETB');
+
+  // Ensure every loan (including previously created loans) is synced to the Transactions Ledger
+  useEffect(() => {
+    if (loans.length === 0) return;
+
+    setEntries((prevEntries) => {
+      let updated = [...prevEntries];
+      let mutated = false;
+
+      for (const loan of loans) {
+        const linkedAcc = loan.accountId
+          ? accounts.find((a) => a.id === loan.accountId)
+          : undefined;
+
+        // 1. Check for principal disbursement / issuance entry
+        const existingPrincipalIndex = updated.findIndex(
+          (e) =>
+            (e.loanId === loan.id && e.loanEntryKind === 'principal') ||
+            (!e.loanId &&
+              e.category === 'Loan' &&
+              (e.title.includes(`Loan Disbursed: ${loan.title}`) ||
+                e.title.includes(`Loan Issued: ${loan.title}`)))
+        );
+
+        if (existingPrincipalIndex === -1) {
+          const principalEntry: FinTrackEntry = {
+            id: `ft-loan-init-${loan.id}`,
+            title:
+              loan.direction === 'borrowed'
+                ? `Loan Disbursed: ${loan.title} (${loan.providerName})`
+                : `P2P Loan Issued: ${loan.title} (${loan.providerName})`,
+            amount: loan.principalAmount,
+            currency: loan.currency,
+            type: loan.direction === 'borrowed' ? 'income' : 'expense',
+            category: 'Loan',
+            accountId: linkedAcc?.id || loan.accountId,
+            accountName: linkedAcc?.name,
+            loanId: loan.id,
+            loanEntryKind: 'principal',
+            date: loan.startDate || new Date().toISOString().slice(0, 10),
+          };
+          updated = [principalEntry, ...updated];
+          mutated = true;
+        } else if (!updated[existingPrincipalIndex].loanId) {
+          updated[existingPrincipalIndex] = {
+            ...updated[existingPrincipalIndex],
+            loanId: loan.id,
+            loanEntryKind: 'principal',
+          };
+          mutated = true;
+        }
+
+        // 2. Check for repayment / collection entries if paidAmount > 0
+        if (loan.paidAmount > 0) {
+          const repaymentEntries = updated.filter(
+            (e) =>
+              (e.loanId === loan.id && e.loanEntryKind === 'repayment') ||
+              (!e.loanId &&
+                e.category === 'Loan' &&
+                (e.title.includes(`Loan Repayment: ${loan.title}`) ||
+                  e.title.includes(`Loan Collection: ${loan.title}`)))
+          );
+
+          const recordedPaid = repaymentEntries.reduce((sum, e) => sum + e.amount, 0);
+          if (repaymentEntries.length > 0) {
+            updated = updated.map((e) => {
+              if (
+                !e.loanId &&
+                e.category === 'Loan' &&
+                (e.title.includes(`Loan Repayment: ${loan.title}`) ||
+                  e.title.includes(`Loan Collection: ${loan.title}`))
+              ) {
+                mutated = true;
+                return { ...e, loanId: loan.id, loanEntryKind: 'repayment' };
+              }
+              return e;
+            });
+          }
+
+          const unrecordedPaid = Number((loan.paidAmount - recordedPaid).toFixed(2));
+          if (unrecordedPaid >= 0.01) {
+            const repayEntry: FinTrackEntry = {
+              id: `ft-loan-repay-sync-${loan.id}-${Date.now()}`,
+              title:
+                loan.direction === 'borrowed'
+                  ? `Loan Repayment: ${loan.title} (${loan.providerName})`
+                  : `Loan Collection: ${loan.title} (${loan.providerName})`,
+              amount: unrecordedPaid,
+              currency: loan.currency,
+              type: loan.direction === 'borrowed' ? 'expense' : 'income',
+              category: 'Loan',
+              accountId: linkedAcc?.id || loan.accountId,
+              accountName: linkedAcc?.name,
+              loanId: loan.id,
+              loanEntryKind: 'repayment',
+              date: new Date().toISOString().slice(0, 10),
+            };
+            updated = [repayEntry, ...updated];
+            mutated = true;
+          }
+        }
+      }
+
+      return mutated ? updated : prevEntries;
+    });
+  }, [loans, accounts]);
 
   // Persist states to Sandboxed Storage
   useEffect(() => {
@@ -604,7 +726,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
   // Synchronize Shared Accounts Balance to SuperApp Shared Wallet
   const pushSharedBalanceToSuperApp = useCallback(
-    async (customAccounts?: FinTrackAccount[], silent = false) => {
+    async (customAccounts?: FinTrackAccount[], silent = false, customDescription?: string) => {
       const list = customAccounts || accounts;
       const sharedList = list.filter((a) => a.shareWithSuperApp);
       const totalInBase = sharedList.reduce(
@@ -628,9 +750,10 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
       const res = await sdk.payment.syncSharedBalance(
         totalInBase,
-        `FinTrack Shared Balance (${sharedList.length} ${
-          sharedList.length === 1 ? 'account' : 'accounts'
-        } in ${baseCurrency})`
+        customDescription ||
+          `FinTrack Shared Balance (${sharedList.length} ${
+            sharedList.length === 1 ? 'account' : 'accounts'
+          } in ${baseCurrency})`
       );
 
       if (!silent && res.success) {
@@ -667,7 +790,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         accountId?: string;
         deltaAmount: number;
         deltaCurrency: CurrencyCode;
-      }>
+      }>,
+      reasonDescription?: string
     ) => {
       const valid = adjustments.filter(
         (adj) =>
@@ -694,7 +818,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         });
         if (autoSyncSuperApp && next.some((a) => a.shareWithSuperApp)) {
           setTimeout(() => {
-            pushSharedBalanceToSuperApp(next, true);
+            pushSharedBalanceToSuperApp(next, true, reasonDescription);
           }, 0);
         }
         return next;
@@ -705,7 +829,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
   // Adjust a specific Bank or Wallet account's balance and auto-sync to SuperApp Wallet if enabled
   const adjustAccountBalance = useCallback(
-    (accountId: string, deltaInAccountCurrency: number) => {
+    (accountId: string, deltaInAccountCurrency: number, reasonDescription?: string) => {
       setAccounts((prev) => {
         const next = prev.map((acc) => {
           if (acc.id !== accountId) return acc;
@@ -717,7 +841,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         });
         if (autoSyncSuperApp && next.some((a) => a.shareWithSuperApp)) {
           setTimeout(() => {
-            pushSharedBalanceToSuperApp(next, true);
+            pushSharedBalanceToSuperApp(next, true, reasonDescription);
           }, 0);
         }
         return next;
@@ -731,6 +855,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     async (sched: ScheduledTransaction, isAuto = false) => {
       const targetAcc = accounts.find((a) => a.id === sched.accountId);
       const signedDeltaInSchedCurr = sched.type === 'income' ? sched.amount : -sched.amount;
+      const entryTitle = `[Scheduled] ${sched.title}`;
 
       if (targetAcc) {
         const deltaInAccCurr = convertAmount(
@@ -738,7 +863,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
           sched.currency,
           targetAcc.currency
         );
-        adjustAccountBalance(targetAcc.id, deltaInAccCurr);
+        adjustAccountBalance(targetAcc.id, deltaInAccCurr, entryTitle);
       }
 
       if (sched.syncToSuperAppWallet) {
@@ -752,7 +877,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
       const newEntry: FinTrackEntry = {
         id: `ft-sched-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        title: `[Scheduled] ${sched.title}`,
+        title: entryTitle,
         amount: sched.amount,
         currency: sched.currency,
         type: sched.type,
@@ -783,7 +908,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       if (!isAuto) {
         sdk.ui.hapticFeedback('success');
         sdk.ui.showToast(
-          `Posted scheduled ${sched.type}: ${formatMoney(sched.amount, sched.currency)}`,
+          `Posted scheduled ${sched.type} to ledger: ${formatMoney(sched.amount, sched.currency)}`,
           'success'
         );
       }
@@ -804,7 +929,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       sdk.ui.showToast(
         `Auto-posted ${dueAutoItems.length} due scheduled ${
           dueAutoItems.length === 1 ? 'transaction' : 'transactions'
-        }`,
+        } to ledger`,
         'info'
       );
     }
@@ -845,6 +970,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     const preset = INSTITUTION_PRESETS.find((p) => p.name === accInstitution);
 
     if (editingAccountId) {
+      const prevAcc = accounts.find((a) => a.id === editingAccountId);
       const nextAccounts = accounts.map((acc) => {
         if (acc.id !== editingAccountId) return acc;
         return {
@@ -864,17 +990,41 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
       setAccounts(nextAccounts);
 
-      // Update accountName on linked ledger entries so transaction history stays consistent
-      setEntries((prev) =>
-        prev.map((entry) =>
+      // Update accountName on linked ledger entries and record manual balance adjustment if balance changed
+      const prevBalInNewCurr = prevAcc
+        ? convertAmount(prevAcc.balance, prevAcc.currency, accCurrency)
+        : initialBal;
+      const balanceDiff = Number((initialBal - prevBalInNewCurr).toFixed(2));
+
+      setEntries((prev) => {
+        const renamed = prev.map((entry) =>
           entry.accountId === editingAccountId
             ? { ...entry, accountName: accName.trim() }
             : entry
-        )
-      );
+        );
+        if (Math.abs(balanceDiff) >= 0.01) {
+          const adjEntry: FinTrackEntry = {
+            id: `ft-acc-adj-${Date.now()}`,
+            title: `Balance Adjustment: ${accName.trim()}`,
+            amount: Math.abs(balanceDiff),
+            currency: accCurrency,
+            type: balanceDiff > 0 ? 'income' : 'expense',
+            category: balanceDiff > 0 ? 'Income' : 'Transfer',
+            accountId: editingAccountId,
+            accountName: accName.trim(),
+            date: new Date().toISOString().slice(0, 10),
+          };
+          return [adjEntry, ...renamed];
+        }
+        return renamed;
+      });
 
       if (autoSyncSuperApp && nextAccounts.some((a) => a.shareWithSuperApp)) {
-        pushSharedBalanceToSuperApp(nextAccounts, false);
+        pushSharedBalanceToSuperApp(
+          nextAccounts,
+          false,
+          `Account Updated: ${accName.trim()} (${accCurrency})`
+        );
       } else {
         sdk.ui.hapticFeedback('success');
         sdk.ui.showToast(
@@ -907,8 +1057,28 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     if (!schedAccountId) setSchedAccountId(newAcc.id);
     if (!loanAccountId) setLoanAccountId(newAcc.id);
 
+    // Sync opening balance to the Transactions Ledger if initialBal > 0
+    if (initialBal > 0) {
+      const openingEntry: FinTrackEntry = {
+        id: `ft-acc-open-${newAcc.id}`,
+        title: `Opening Balance: ${newAcc.name}`,
+        amount: Number(initialBal.toFixed(2)),
+        currency: accCurrency,
+        type: 'income',
+        category: 'Income',
+        accountId: newAcc.id,
+        accountName: newAcc.name,
+        date: new Date().toISOString().slice(0, 10),
+      };
+      setEntries((prev) => [openingEntry, ...prev]);
+    }
+
     if (accShareSuperApp && autoSyncSuperApp) {
-      pushSharedBalanceToSuperApp(nextAccounts, false);
+      pushSharedBalanceToSuperApp(
+        nextAccounts,
+        false,
+        `Opening Balance: ${newAcc.name} (${newAcc.currency})`
+      );
     } else {
       sdk.ui.hapticFeedback('success');
       sdk.ui.showToast(`Added ${newAcc.type}: ${newAcc.name} (${newAcc.currency})`, 'success');
@@ -976,14 +1146,15 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       return acc;
     });
 
+    const transferDesc = `Transfer: ${fromAcc.name} → ${toAcc.name}`;
     setAccounts(nextAccounts);
     if (autoSyncSuperApp) {
-      pushSharedBalanceToSuperApp(nextAccounts, true);
+      pushSharedBalanceToSuperApp(nextAccounts, true, transferDesc);
     }
 
     const transferEntry: FinTrackEntry = {
       id: `ft-xfer-${Date.now()}`,
-      title: `Transfer: ${fromAcc.name} → ${toAcc.name}`,
+      title: transferDesc,
       amount: amt,
       currency: fromAcc.currency,
       type: 'expense',
@@ -1007,7 +1178,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     );
   };
 
-  // Handlers: Ledger Transactions (Create, Update, Delete with Auto-Sync Balance)
+  // Handlers: Ledger Transactions (Create, Update, Delete with Auto-Sync Balance & Loan Sync)
   const startEditTransaction = (entry: FinTrackEntry) => {
     setEditingTxId(entry.id);
     setTxTitle(entry.title);
@@ -1043,7 +1214,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         ? accounts.find((a) => a.id === txAccountId)
         : undefined;
 
-    // UPDATE EXISTING TRANSACTION (Auto-syncing balance delta across old & new account)
+    // UPDATE EXISTING TRANSACTION (Auto-syncing balance delta across old & new account + linked loan/goal)
     if (editingTxId) {
       const oldEntry = entries.find((item) => item.id === editingTxId);
       if (!oldEntry) {
@@ -1085,7 +1256,64 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         });
       }
 
-      applyAccountBalanceAdjustments(adjustments);
+      applyAccountBalanceAdjustments(adjustments, `Updated: ${txTitle.trim()}`);
+
+      // 3. If this ledger entry is linked to a Loan, keep the Loan record in sync!
+      if (oldEntry.loanId) {
+        setLoans((prevLoans) =>
+          prevLoans.map((loan) => {
+            if (loan.id !== oldEntry.loanId) return loan;
+            if (oldEntry.loanEntryKind === 'repayment') {
+              const oldInLoanCurr = convertAmount(oldEntry.amount, oldEntry.currency, loan.currency);
+              const newInLoanCurr = convertAmount(numericAmount, txCurrency, loan.currency);
+              const nextPaid = Math.max(
+                0,
+                Math.min(
+                  loan.totalPayable,
+                  Number((loan.paidAmount - oldInLoanCurr + newInLoanCurr).toFixed(2))
+                )
+              );
+              return {
+                ...loan,
+                paidAmount: nextPaid,
+                status: nextPaid >= loan.totalPayable - 0.01 ? 'paid' : 'active',
+              };
+            }
+            if (oldEntry.loanEntryKind === 'principal') {
+              const newTotalPayable = Number(
+                (numericAmount * (1 + Math.max(0, loan.interestRate) / 100)).toFixed(2)
+              );
+              return {
+                ...loan,
+                principalAmount: numericAmount,
+                totalPayable: newTotalPayable,
+                currency: txCurrency,
+                accountId: linkedAcc?.id,
+                status: loan.paidAmount >= newTotalPayable - 0.01 ? 'paid' : 'active',
+              };
+            }
+            return loan;
+          })
+        );
+      }
+
+      // 4. If this ledger entry is linked to a Savings Goal, keep the Goal savedAmount in sync!
+      if (oldEntry.goalId) {
+        setGoals((prevGoals) =>
+          prevGoals.map((g) => {
+            if (g.id !== oldEntry.goalId) return g;
+            const oldInGoalCurr = convertAmount(oldEntry.amount, oldEntry.currency, g.currency);
+            const newInGoalCurr = convertAmount(numericAmount, txCurrency, g.currency);
+            return {
+              ...g,
+              savedAmount: Math.max(
+                0,
+                Math.min(g.targetAmount, Number((g.savedAmount - oldInGoalCurr + newInGoalCurr).toFixed(2)))
+              ),
+            };
+          })
+        );
+      }
 
       // If settled directly via SuperApp Wallet without shared account auto-sync, sync the net difference
       const isHandledBySharedAutoSync =
@@ -1163,13 +1391,16 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
     if (linkedAcc) {
       const signedInTxCurr = txType === 'income' ? numericAmount : -numericAmount;
-      applyAccountBalanceAdjustments([
-        {
-          accountId: linkedAcc.id,
-          deltaAmount: signedInTxCurr,
-          deltaCurrency: txCurrency,
-        },
-      ]);
+      applyAccountBalanceAdjustments(
+        [
+          {
+            accountId: linkedAcc.id,
+            deltaAmount: signedInTxCurr,
+            deltaCurrency: txCurrency,
+          },
+        ],
+        `FinTrack ${txType === 'income' ? 'Income' : 'Expense'}: ${txTitle.trim()}`
+      );
     }
 
     const newEntry: FinTrackEntry = {
@@ -1228,7 +1459,45 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     }
 
     if (adjustments.length > 0) {
-      applyAccountBalanceAdjustments(adjustments);
+      applyAccountBalanceAdjustments(adjustments, `Deleted: ${targetEntry.title}`);
+    }
+
+    // If the deleted entry was linked to a Loan, keep the Loan state synchronized
+    if (targetEntry.loanId) {
+      if (targetEntry.loanEntryKind === 'repayment') {
+        setLoans((prevLoans) =>
+          prevLoans.map((loan) => {
+            if (loan.id !== targetEntry.loanId) return loan;
+            const repayInLoanCurr = convertAmount(
+              targetEntry.amount,
+              targetEntry.currency,
+              loan.currency
+            );
+            const nextPaid = Math.max(0, Number((loan.paidAmount - repayInLoanCurr).toFixed(2)));
+            return {
+              ...loan,
+              paidAmount: nextPaid,
+              status: nextPaid >= loan.totalPayable - 0.01 ? 'paid' : 'active',
+            };
+          })
+        );
+      } else if (targetEntry.loanEntryKind === 'principal') {
+        setLoans((prevLoans) => prevLoans.filter((loan) => loan.id !== targetEntry.loanId));
+      }
+    }
+
+    // If the deleted entry was linked to a Savings Goal, reverse the deposit on the Goal
+    if (targetEntry.goalId) {
+      setGoals((prevGoals) =>
+        prevGoals.map((g) => {
+          if (g.id !== targetEntry.goalId) return g;
+          const amtInGoalCurr = convertAmount(targetEntry.amount, targetEntry.currency, g.currency);
+          return {
+            ...g,
+            savedAmount: Math.max(0, Number((g.savedAmount - amtInGoalCurr).toFixed(2))),
+          };
+        })
+      );
     }
 
     const linkedAcc = targetEntry.accountId
@@ -1259,7 +1528,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     );
   };
 
-  // Handlers: Loan Providers (P2P & B2C) & Loan Tracking
+  // Handlers: Loan Providers (P2P & B2C) & Loan Tracking (Synced with Ledger & Accounts)
   const handleAddLoanProvider = (e: React.FormEvent) => {
     e.preventDefault();
     const rate = parseFloat(provInterest || '0');
@@ -1309,6 +1578,28 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     sdk.ui.showToast(`Added ${created.providerType} provider: ${created.name}`, 'success');
   };
 
+  const startEditLoan = (loan: FinTrackLoan) => {
+    setEditingLoanId(loan.id);
+    setLoanTitle(loan.title);
+    setLoanProviderId(loan.providerId);
+    setLoanDirection(loan.direction);
+    setLoanPrincipal(String(loan.principalAmount));
+    setLoanInterest(String(loan.interestRate));
+    setLoanCurrency(loan.currency);
+    setLoanAccountId(loan.accountId || '');
+    setLoanDueDate(loan.dueDate);
+    setDisburseToAccount(Boolean(loan.accountId));
+    setShowAddLoanForm(true);
+    sdk.ui.hapticFeedback('light');
+  };
+
+  const resetLoanForm = () => {
+    setEditingLoanId(null);
+    setLoanTitle('');
+    setLoanPrincipal('');
+    setShowAddLoanForm(false);
+  };
+
   const handleCreateLoan = (e: React.FormEvent) => {
     e.preventDefault();
     const principal = parseFloat(loanPrincipal);
@@ -1325,8 +1616,124 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     }
 
     const totalPayable = Number((principal * (1 + Math.max(0, interest) / 100)).toFixed(2));
+    const targetAcc =
+      disburseToAccount && loanAccountId
+        ? accounts.find((a) => a.id === loanAccountId)
+        : undefined;
+
+    const entryTitle =
+      loanDirection === 'borrowed'
+        ? `Loan Disbursed: ${loanTitle.trim()} (${provider.name})`
+        : `P2P Loan Issued: ${loanTitle.trim()} (${provider.name})`;
+    const entryType: 'income' | 'expense' = loanDirection === 'borrowed' ? 'income' : 'expense';
+
+    // UPDATE EXISTING LOAN (Auto-syncing with Ledger & Account Balance)
+    if (editingLoanId) {
+      const oldLoan = loans.find((l) => l.id === editingLoanId);
+      if (!oldLoan) {
+        resetLoanForm();
+        return;
+      }
+
+      const existingPrincipalEntry = entries.find(
+        (item) => item.loanId === editingLoanId && item.loanEntryKind === 'principal'
+      );
+
+      const adjustments: Array<{
+        accountId?: string;
+        deltaAmount: number;
+        deltaCurrency: CurrencyCode;
+      }> = [];
+
+      // Reverse old principal effect if it was disbursed to an account
+      const oldAccId = existingPrincipalEntry?.accountId || oldLoan.accountId;
+      if (oldAccId) {
+        const reverseOld =
+          oldLoan.direction === 'borrowed' ? -oldLoan.principalAmount : oldLoan.principalAmount;
+        adjustments.push({
+          accountId: oldAccId,
+          deltaAmount: reverseOld,
+          deltaCurrency: oldLoan.currency,
+        });
+      }
+
+      // Apply new principal effect if targetAcc is selected
+      if (targetAcc) {
+        const applyNew = loanDirection === 'borrowed' ? principal : -principal;
+        adjustments.push({
+          accountId: targetAcc.id,
+          deltaAmount: applyNew,
+          deltaCurrency: loanCurrency,
+        });
+      }
+
+      if (adjustments.length > 0) {
+        applyAccountBalanceAdjustments(adjustments, entryTitle);
+      }
+
+      const updatedLoan: FinTrackLoan = {
+        ...oldLoan,
+        title: loanTitle.trim(),
+        providerId: provider.id,
+        providerName: provider.name,
+        providerType: provider.providerType,
+        direction: loanDirection,
+        principalAmount: principal,
+        interestRate: Math.max(0, interest),
+        totalPayable,
+        currency: loanCurrency,
+        accountId: targetAcc?.id,
+        dueDate: loanDueDate,
+        status: oldLoan.paidAmount >= totalPayable - 0.01 ? 'paid' : 'active',
+      };
+
+      setLoans((prev) => prev.map((l) => (l.id === editingLoanId ? updatedLoan : l)));
+
+      // Update or insert the principal entry in the Transactions Ledger
+      setEntries((prev) => {
+        if (existingPrincipalEntry) {
+          return prev.map((item) =>
+            item.id === existingPrincipalEntry.id
+              ? {
+                  ...item,
+                  title: entryTitle,
+                  amount: principal,
+                  currency: loanCurrency,
+                  type: entryType,
+                  category: 'Loan',
+                  accountId: targetAcc?.id,
+                  accountName: targetAcc?.name,
+                }
+              : item
+          );
+        }
+        const newLedgerEntry: FinTrackEntry = {
+          id: `ft-loan-init-${editingLoanId}`,
+          title: entryTitle,
+          amount: principal,
+          currency: loanCurrency,
+          type: entryType,
+          category: 'Loan',
+          accountId: targetAcc?.id,
+          accountName: targetAcc?.name,
+          loanId: editingLoanId,
+          loanEntryKind: 'principal',
+          date: oldLoan.startDate || new Date().toISOString().slice(0, 10),
+        };
+        return [newLedgerEntry, ...prev];
+      });
+
+      resetLoanForm();
+      sdk.ui.hapticFeedback('success');
+      sdk.ui.showToast(`Updated loan & synced ledger: ${updatedLoan.title}`, 'success');
+      return;
+    }
+
+    // CREATE NEW LOAN (Always records in Ledger & syncs linked Account Balance)
+    const newLoanId = `loan-${Date.now()}`;
+    const todayStr = new Date().toISOString().slice(0, 10);
     const newLoan: FinTrackLoan = {
-      id: `loan-${Date.now()}`,
+      id: newLoanId,
       title: loanTitle.trim(),
       providerId: provider.id,
       providerName: provider.name,
@@ -1337,49 +1744,82 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       totalPayable,
       paidAmount: 0,
       currency: loanCurrency,
-      accountId: loanAccountId || undefined,
-      startDate: new Date().toISOString().slice(0, 10),
+      accountId: targetAcc?.id,
+      startDate: todayStr,
       dueDate: loanDueDate,
       status: 'active',
     };
 
     setLoans((prev) => [newLoan, ...prev]);
 
-    // If disburseToAccount is checked and an account is selected, update account balance & ledger
-    const targetAcc = accounts.find((a) => a.id === loanAccountId);
-    if (disburseToAccount && targetAcc) {
+    if (targetAcc) {
       const signedInLoanCurr = loanDirection === 'borrowed' ? principal : -principal;
-      const deltaInAccCurr = convertAmount(signedInLoanCurr, loanCurrency, targetAcc.currency);
-      adjustAccountBalance(targetAcc.id, deltaInAccCurr);
-
-      const entry: FinTrackEntry = {
-        id: `ft-loan-init-${Date.now()}`,
-        title:
-          loanDirection === 'borrowed'
-            ? `Loan Disbursed: ${newLoan.title} (${provider.name})`
-            : `P2P Loan Issued: ${newLoan.title} (${provider.name})`,
-        amount: principal,
-        currency: loanCurrency,
-        type: loanDirection === 'borrowed' ? 'income' : 'expense',
-        category: 'Loan',
-        accountId: targetAcc.id,
-        accountName: targetAcc.name,
-        date: new Date().toISOString().slice(0, 10),
-      };
-      setEntries((prev) => [entry, ...prev]);
+      applyAccountBalanceAdjustments(
+        [
+          {
+            accountId: targetAcc.id,
+            deltaAmount: signedInLoanCurr,
+            deltaCurrency: loanCurrency,
+          },
+        ],
+        entryTitle
+      );
     }
 
-    setLoanTitle('');
-    setLoanPrincipal('');
-    setShowAddLoanForm(false);
+    // Always sync the loan transaction to the FinTrack Ledger
+    const principalLedgerEntry: FinTrackEntry = {
+      id: `ft-loan-init-${newLoanId}`,
+      title: entryTitle,
+      amount: principal,
+      currency: loanCurrency,
+      type: entryType,
+      category: 'Loan',
+      accountId: targetAcc?.id,
+      accountName: targetAcc?.name,
+      loanId: newLoanId,
+      loanEntryKind: 'principal',
+      date: todayStr,
+    };
+    setEntries((prev) => [principalLedgerEntry, ...prev]);
+
+    resetLoanForm();
     sdk.ui.hapticFeedback('success');
     sdk.ui.showToast(
-      `Tracked ${provider.providerType} loan with ${provider.name}: ${formatMoney(
-        totalPayable,
-        loanCurrency
-      )}`,
+      `Synced ${provider.providerType} loan to ledger: ${formatMoney(totalPayable, loanCurrency)}`,
       'success'
     );
+  };
+
+  const handleDeleteLoan = (loanId: string) => {
+    const linkedEntries = entries.filter((e) => e.loanId === loanId);
+    const adjustments: Array<{
+      accountId?: string;
+      deltaAmount: number;
+      deltaCurrency: CurrencyCode;
+    }> = [];
+
+    for (const entry of linkedEntries) {
+      if (entry.accountId) {
+        const reverseDelta = entry.type === 'income' ? -entry.amount : entry.amount;
+        adjustments.push({
+          accountId: entry.accountId,
+          deltaAmount: reverseDelta,
+          deltaCurrency: entry.currency,
+        });
+      }
+    }
+
+    if (adjustments.length > 0) {
+      applyAccountBalanceAdjustments(adjustments, 'Loan Removed & Balance Restored');
+    }
+
+    setEntries((prev) => prev.filter((e) => e.loanId !== loanId));
+    setLoans((prev) => prev.filter((item) => item.id !== loanId));
+    if (editingLoanId === loanId) {
+      resetLoanForm();
+    }
+    sdk.ui.hapticFeedback('medium');
+    sdk.ui.showToast('Loan removed & linked ledger/account balances updated', 'info');
   };
 
   const handleRecordLoanRepayment = async (e: React.FormEvent) => {
@@ -1394,6 +1834,10 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
     const actualPay = Math.min(remaining, amt);
     const targetAcc = accounts.find((a) => a.id === repayAccountId);
+    const repayTitle =
+      repayLoanTarget.direction === 'borrowed'
+        ? `Loan Repayment: ${repayLoanTarget.title} (${repayLoanTarget.providerName})`
+        : `Loan Collection: ${repayLoanTarget.title} (${repayLoanTarget.providerName})`;
 
     if (targetAcc) {
       // If borrowed, repayment deducts from account; if lent, collection credits account
@@ -1404,20 +1848,14 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         repayLoanTarget.currency,
         targetAcc.currency
       );
-      adjustAccountBalance(targetAcc.id, deltaInAccCurr);
+      adjustAccountBalance(targetAcc.id, deltaInAccCurr, repayTitle);
     } else if (repayAccountId === 'SUPERAPP_WALLET') {
       const amtInBase = convertAmount(actualPay, repayLoanTarget.currency, baseCurrency);
       if (repayLoanTarget.direction === 'borrowed') {
-        const res = await sdk.payment.pay(
-          amtInBase,
-          `Loan Repayment: ${repayLoanTarget.title} (${repayLoanTarget.providerName})`
-        );
+        const res = await sdk.payment.pay(amtInBase, repayTitle);
         if (!res.success) return;
       } else {
-        await sdk.payment.credit(
-          amtInBase,
-          `P2P Loan Collected: ${repayLoanTarget.title} (${repayLoanTarget.providerName})`
-        );
+        await sdk.payment.credit(amtInBase, repayTitle);
       }
     }
 
@@ -1436,10 +1874,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
     const ledgerEntry: FinTrackEntry = {
       id: `ft-loan-repay-${Date.now()}`,
-      title:
-        repayLoanTarget.direction === 'borrowed'
-          ? `Loan Repayment: ${repayLoanTarget.title} (${repayLoanTarget.providerName})`
-          : `Loan Collection: ${repayLoanTarget.title} (${repayLoanTarget.providerName})`,
+      title: repayTitle,
       amount: actualPay,
       currency: repayLoanTarget.currency,
       type: repayLoanTarget.direction === 'borrowed' ? 'expense' : 'income',
@@ -1447,6 +1882,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       accountId: targetAcc?.id,
       accountName:
         targetAcc?.name || (repayAccountId === 'SUPERAPP_WALLET' ? 'SuperApp Wallet' : undefined),
+      loanId: repayLoanTarget.id,
+      loanEntryKind: 'repayment',
       date: new Date().toISOString().slice(0, 10),
       settledViaWallet: repayAccountId === 'SUPERAPP_WALLET',
     };
@@ -1456,7 +1893,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     setRepayAmount('');
     sdk.ui.hapticFeedback('success');
     sdk.ui.showToast(
-      `Recorded ${formatMoney(actualPay, repayLoanTarget.currency)} for ${repayLoanTarget.title}`,
+      `Synced ${formatMoney(actualPay, repayLoanTarget.currency)} loan settlement to ledger`,
       'success'
     );
   };
@@ -1499,7 +1936,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     );
   };
 
-  // Handlers: Savings Goals
+  // Handlers: Savings Goals (Synced with Ledger & SuperApp Wallet)
   const handleContributeToGoal = async (goal: SavingsGoal, amountInGoalCurr: number) => {
     sdk.ui.hapticFeedback('medium');
     const amountInBase = convertAmount(amountInGoalCurr, goal.currency, baseCurrency);
@@ -1509,7 +1946,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     );
     if (!confirmed) return;
 
-    const res = await sdk.payment.pay(amountInBase, `FinTrack Goal Deposit: ${goal.name}`);
+    const depositTitle = `Savings Goal Deposit: ${goal.name}`;
+    const res = await sdk.payment.pay(amountInBase, depositTitle);
     if (res.success) {
       setGoals((prev) =>
         prev.map((g) =>
@@ -1518,9 +1956,25 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
             : g
         )
       );
+
+      // Sync savings goal deposit to the FinTrack Transactions Ledger
+      const goalLedgerEntry: FinTrackEntry = {
+        id: `ft-goal-${Date.now()}`,
+        title: depositTitle,
+        amount: amountInGoalCurr,
+        currency: goal.currency,
+        type: 'expense',
+        category: 'Transfer',
+        goalId: goal.id,
+        accountName: 'SuperApp Wallet',
+        date: new Date().toISOString().slice(0, 10),
+        settledViaWallet: true,
+      };
+      setEntries((prev) => [goalLedgerEntry, ...prev]);
+
       sdk.ui.hapticFeedback('success');
       sdk.ui.showToast(
-        `Added ${formatMoney(amountInGoalCurr, goal.currency)} to ${goal.name}!`,
+        `Added ${formatMoney(amountInGoalCurr, goal.currency)} to ${goal.name} & synced to ledger!`,
         'success'
       );
     }
@@ -2422,15 +2876,17 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
               {(
                 [
                   'ALL',
+                  'Loan',
+                  'Transfer',
+                  'Salary',
+                  'Business',
+                  'Income',
                   'Housing',
                   'Dining',
                   'Transit',
                   'Utilities',
                   'Subscriptions',
                   'Shopping',
-                  'Loan',
-                  'Salary',
-                  'Business',
                 ] as const
               ).map((cat) => {
                 const active = selectedCategoryFilter === cat;
@@ -2512,7 +2968,9 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                     type="button"
                     onClick={() => {
                       setTxType(t);
-                      setTxCategory(t === 'income' ? 'Salary' : 'Dining');
+                      if (txCategory !== 'Loan' && txCategory !== 'Transfer') {
+                        setTxCategory(t === 'income' ? 'Salary' : 'Dining');
+                      }
                     }}
                     style={{
                       backgroundColor: txType === t ? tokens.accentPrimary : tokens.bgSurface,
@@ -2604,6 +3062,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                       <>
                         <option value="Salary">Salary</option>
                         <option value="Business">Business</option>
+                        <option value="Loan">Loan</option>
+                        <option value="Transfer">Transfer</option>
                         <option value="Income">Other Income</option>
                       </>
                     ) : (
@@ -3188,7 +3648,19 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowAddLoanForm(!showAddLoanForm)}
+                  onClick={() => {
+                    if (showAddLoanForm && !editingLoanId) {
+                      resetLoanForm();
+                    } else {
+                      setEditingLoanId(null);
+                      setLoanTitle('');
+                      setLoanPrincipal('');
+                      if (!loanAccountId && accounts[0]) {
+                        setLoanAccountId(accounts[0].id);
+                      }
+                      setShowAddLoanForm(true);
+                    }
+                  }}
                   style={{
                     backgroundColor: tokens.accentPrimary,
                     color: tokens.accentContrast,
@@ -3205,15 +3677,19 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                   onSubmit={handleCreateLoan}
                   style={{
                     backgroundColor: tokens.bgCard,
-                    borderColor: tokens.borderDefault,
+                    borderColor: editingLoanId ? tokens.borderAccent : tokens.borderDefault,
                   }}
                   className="p-4 rounded-2xl border space-y-3"
                 >
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold">Track New B2C or P2P Loan</h4>
+                    <h4 className="text-xs font-bold">
+                      {editingLoanId
+                        ? 'Update Loan & Sync Ledger'
+                        : 'Track New B2C or P2P Loan (Syncs to Ledger)'}
+                    </h4>
                     <button
                       type="button"
-                      onClick={() => setShowAddLoanForm(false)}
+                      onClick={resetLoanForm}
                       className="text-[11px]"
                       style={{ color: tokens.textSecondary }}
                     >
@@ -3384,7 +3860,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                         }}
                         className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
                       >
-                        <option value="">None</option>
+                        <option value="">None (Ledger Only)</option>
                         {accounts.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.name} ({a.currency})
@@ -3424,7 +3900,9 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                     }}
                     className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
                   >
-                    Save Loan Record
+                    {editingLoanId
+                      ? 'Update Loan & Sync Ledger'
+                      : 'Save Loan & Sync to Ledger'}
                   </button>
                 </form>
               )}
@@ -3488,7 +3966,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                         }}
                         className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
                       >
-                        <option value="">Manual (No Account Change)</option>
+                        <option value="">Manual (Ledger Only)</option>
                         <option value="SUPERAPP_WALLET">SuperApp Shared Wallet</option>
                         {accounts.map((a) => (
                           <option key={a.id} value={a.id}>
@@ -3507,7 +3985,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                     }}
                     className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
                   >
-                    Confirm Settlement
+                    Confirm Settlement & Sync Ledger
                   </button>
                 </form>
               )}
@@ -3540,7 +4018,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                         key={loan.id}
                         style={{
                           backgroundColor: tokens.bgCard,
-                          borderColor: tokens.borderDefault,
+                          borderColor:
+                            editingLoanId === loan.id ? tokens.borderAccent : tokens.borderDefault,
                         }}
                         className="p-4 rounded-2xl border space-y-3"
                       >
@@ -3603,7 +4082,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                                 onClick={() => {
                                   setRepayLoanTarget(loan);
                                   setRepayAmount(String(remaining.toFixed(2)));
-                                  setRepayAccountId(loan.accountId || '');
+                                  setRepayAccountId(loan.accountId || accounts[0]?.id || '');
                                 }}
                                 style={{
                                   backgroundColor: tokens.accentPrimary,
@@ -3616,11 +4095,19 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                             )}
                             <button
                               type="button"
-                              onClick={() =>
-                                setLoans((prev) => prev.filter((item) => item.id !== loan.id))
-                              }
+                              onClick={() => startEditLoan(loan)}
+                              className="p-1 text-slate-400 hover:text-blue-400 transition"
+                              aria-label={`Edit loan ${loan.title}`}
+                              title="Edit loan"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLoan(loan.id)}
                               className="p-1 text-slate-400 hover:text-rose-400 transition"
-                              aria-label="Delete loan"
+                              aria-label={`Delete loan ${loan.title}`}
+                              title="Delete loan"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
