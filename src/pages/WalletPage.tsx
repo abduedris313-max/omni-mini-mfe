@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSuperApp } from '../context/SuperAppContext';
+import { nativeBridgeService } from '../services/nativeBridgeService';
 import {
   Wallet,
   Plus,
@@ -8,10 +9,15 @@ import {
   ShieldCheck,
   PieChart,
   Landmark,
+  QrCode,
+  Camera,
+  Share2,
 } from 'lucide-react';
 
 export const WalletPage: React.FC = () => {
   const {
+    user,
+    settings,
     walletBalance,
     transactions,
     topUpWallet,
@@ -22,6 +28,9 @@ export const WalletPage: React.FC = () => {
     showToast,
     hapticFeedback,
     themeTokens,
+    requestBiometricAuth,
+    openQRScanner,
+    sendLocalNotification,
   } = useSuperApp();
 
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
@@ -37,7 +46,7 @@ export const WalletPage: React.FC = () => {
     }
   })();
 
-  const handleTopUpConfirm = (e: React.FormEvent) => {
+  const handleTopUpConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(topUpAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -45,9 +54,22 @@ export const WalletPage: React.FC = () => {
       return;
     }
 
-    topUpWallet(amt);
     setTopUpModalOpen(false);
+
+    if (settings.biometricAuth) {
+      const verified = await requestBiometricAuth(
+        `Authorize $${amt.toFixed(2)} deposit to your OmniMini Shared Wallet`
+      );
+      if (!verified) return;
+    }
+
+    topUpWallet(amt);
     hapticFeedback('success');
+    await sendLocalNotification(
+      'Wallet Top-Up Confirmed',
+      `+$${amt.toFixed(2)} credited to your OmniMini Shared Wallet.`,
+      1
+    );
   };
 
   return (
@@ -107,26 +129,60 @@ export const WalletPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-5 flex gap-2 pt-3 border-t border-white/20">
+        <div className="mt-5 grid grid-cols-2 gap-2 pt-3 border-t border-white/20">
           <button
             onClick={() => {
               setTopUpModalOpen(true);
               hapticFeedback('light');
             }}
-            className="flex-1 py-2.5 rounded-xl bg-white text-slate-950 font-bold text-xs shadow-sm hover:bg-slate-100 transition flex items-center justify-center gap-1.5 ios-active"
+            className="py-2.5 rounded-xl bg-white text-slate-950 font-bold text-xs shadow-sm hover:bg-slate-100 transition flex items-center justify-center gap-1.5 ios-active"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Top Up Balance</span>
           </button>
           <button
             onClick={() => {
+              openQRScanner('scan');
+            }}
+            className="py-2.5 rounded-xl bg-black/25 text-white font-bold text-xs hover:bg-black/35 transition flex items-center justify-center gap-1.5 ios-active"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Scan & Pay QR</span>
+          </button>
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <button
+            onClick={() => openQRScanner('receive')}
+            className="py-2 rounded-xl bg-black/20 text-white font-semibold text-[11px] hover:bg-black/30 transition flex items-center justify-center gap-1 ios-active"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>Receive QR</span>
+          </button>
+          <button
+            onClick={async () => {
+              hapticFeedback('light');
+              await nativeBridgeService.shareContent({
+                title: 'OmniMini Wallet Payment Link',
+                text: `Send payment to ${user?.name || 'my OmniMini Wallet'}`,
+                url: `omnimini://pay?to=${encodeURIComponent(user?.name || 'OmniMini User')}&amount=25.00&currency=USD`,
+              });
+              showToast('Payment link shared', 'success');
+            }}
+            className="py-2 rounded-xl bg-black/20 text-white font-semibold text-[11px] hover:bg-black/30 transition flex items-center justify-center gap-1 ios-active"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Share Link</span>
+          </button>
+          <button
+            onClick={() => {
               openMiniApp('fintrack-budget');
               hapticFeedback('light');
             }}
-            className="flex-1 py-2.5 rounded-xl bg-black/25 text-white font-bold text-xs hover:bg-black/35 transition flex items-center justify-center gap-1.5 ios-active"
+            className="py-2 rounded-xl bg-black/20 text-white font-semibold text-[11px] hover:bg-black/30 transition flex items-center justify-center gap-1 ios-active"
           >
             <Landmark className="w-3.5 h-3.5" />
-            <span>FinTrack Accounts</span>
+            <span>FinTrack</span>
           </button>
         </div>
       </div>

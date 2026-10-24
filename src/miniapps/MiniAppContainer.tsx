@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSuperApp } from '../context/SuperAppContext';
-import { createMiniAppSDK } from '../sdk/createMiniAppSDK';
+import { useNativeBridge } from '../hooks/useNativeBridge';
 import { THEME_PRESETS } from '../theme/presets';
 import { ThemePresetId } from '../theme/types';
 import { PayPulseApp } from './PayPulseWallet';
@@ -15,13 +15,11 @@ import { StarterMiniApp } from '../templates/miniAppStarter';
 import {
   ChevronLeft,
   MoreHorizontal,
-  ShieldAlert,
   Sliders,
   X,
   Share2,
   RefreshCw,
   Palette,
-  Sparkles,
   Eye,
   Check,
 } from 'lucide-react';
@@ -29,6 +27,10 @@ import {
 export const MiniAppContainer: React.FC = () => {
   const context = useSuperApp();
   const { activeMiniAppId, closeMiniApp, availableApps, setCurrentTab } = context;
+
+  // Bind Capacitor native plugins (Haptics, StatusBar, SplashScreen, Toast, Camera, Biometrics)
+  // directly to the active MiniAppBridgeSDK runtime instance
+  const { sdk } = useNativeBridge(activeMiniAppId || 'superapp-host');
 
   const [showAppMenu, setShowAppMenu] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
@@ -56,9 +58,6 @@ export const MiniAppContainer: React.FC = () => {
       </div>
     );
   }
-
-  // Create isolated SDK bridge instance with live theming engine
-  const sdk = createMiniAppSDK(app.id, context);
 
   const renderMiniAppContent = () => {
     switch (app.id) {
@@ -433,14 +432,19 @@ export const MiniAppContainer: React.FC = () => {
             </button>
 
             <button
-              onClick={() => {
+              onClick={async () => {
                 setShowAppMenu(false);
-                sdk.ui.showToast('App link copied to clipboard', 'success');
+                await sdk.device.share({
+                  title: `${app.name} on OmniMini`,
+                  text: `Launch ${app.name} (${app.summary}) on OmniMini Super App`,
+                  url: `omnimini://app/${app.id}`,
+                });
+                sdk.ui.showToast('Shared Mini App deep link', 'success');
               }}
               className="w-full p-3 rounded-xl hover:bg-slate-800 text-left text-xs font-semibold text-slate-200 flex items-center gap-3 transition"
             >
               <Share2 className="w-4 h-4 text-cyan-400" />
-              <span>Share Mini App</span>
+              <span>Share Mini App Deep Link</span>
             </button>
 
             <button

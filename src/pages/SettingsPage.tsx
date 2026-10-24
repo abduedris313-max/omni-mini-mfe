@@ -3,7 +3,9 @@ import { useSuperApp } from '../context/SuperAppContext';
 import { THEME_PRESETS } from '../theme/presets';
 import { ThemePresetId } from '../theme/types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
+import { AppLogoSuiteModal, LOGO_RESOLUTION_SPECS } from '../components/AppLogoSuiteModal';
 import { useServiceWorker } from '../hooks/useServiceWorker';
+import { nativeBridgeService } from '../services/nativeBridgeService';
 import {
   Palette,
   Moon,
@@ -24,6 +26,13 @@ import {
   HardDriveDownload,
   RefreshCw,
   Database,
+  Fingerprint,
+  QrCode,
+  Bell,
+  Share2,
+  KeyRound,
+  Terminal,
+  Layers,
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -49,6 +58,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     isOnline,
     pendingSyncCount,
     syncOfflineQueue,
+    requestBiometricAuth,
+    openQRScanner,
+    sendLocalNotification,
   } = useSuperApp();
 
   const {
@@ -64,6 +76,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
   } = useServiceWorker();
 
   const [expandedAppId, setExpandedAppId] = useState<string | null>('paypulse-wallet');
+  const [newVaultPin, setNewVaultPin] = useState('');
+  const [showLogoSuiteModal, setShowLogoSuiteModal] = useState(false);
+  const platformInfo = nativeBridgeService.getPlatformInfo();
 
   const accentColors: Array<{
     id: 'blue' | 'indigo' | 'emerald' | 'amber' | 'rose' | 'cyan' | 'violet';
@@ -859,6 +874,317 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
         </div>
       </div>
 
+      {/* MOBILE APP & CAPACITOR ANDROID NATIVE BRIDGE SECTION */}
+      <div className="space-y-2">
+        <span
+          className="text-xs font-bold uppercase tracking-wider px-1"
+          style={{ color: themeTokens.textMuted }}
+        >
+          Mobile App & Native Bridge (Android APK / AAB)
+        </span>
+
+        <div
+          className="rounded-3xl border p-4 space-y-4 backdrop-blur-md"
+          style={{
+            backgroundColor: themeTokens.bgCard,
+            borderColor: themeTokens.borderDefault,
+          }}
+        >
+          {/* Runtime Identity Row */}
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-bold" style={{ color: themeTokens.textPrimary }}>
+                Capacitor Native Shell ({platformInfo.appId})
+              </div>
+              <div className="text-[11px]" style={{ color: themeTokens.textSecondary }}>
+                Platform: <span className="uppercase font-mono font-bold">{platformInfo.platform}</span> · Scheme:{' '}
+                <span className="font-mono">{platformInfo.deepLinkScheme}</span>
+              </div>
+            </div>
+            <span
+              className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-xl border"
+              style={{
+                backgroundColor: themeTokens.accentMuted,
+                color: themeTokens.accentPrimary,
+                borderColor: themeTokens.borderAccent,
+              }}
+            >
+              {platformInfo.isNative ? 'Native APK' : 'Hybrid Mobile'}
+            </span>
+          </div>
+
+          {/* Biometric Gate Toggle */}
+          <div
+            className="p-3 rounded-2xl border flex items-center justify-between gap-3"
+            style={{
+              backgroundColor: themeTokens.bgSurface,
+              borderColor: themeTokens.borderDefault,
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className="p-2 rounded-xl"
+                style={{
+                  backgroundColor: themeTokens.bgCard,
+                  color: themeTokens.accentPrimary,
+                }}
+              >
+                <Fingerprint className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold" style={{ color: themeTokens.textPrimary }}>
+                  Biometric Security Gate
+                </div>
+                <div className="text-[11px]" style={{ color: themeTokens.textSecondary }}>
+                  Require fingerprint / Face ID or PIN before wallet transfers
+                </div>
+              </div>
+            </div>
+
+            <input
+              type="checkbox"
+              checked={settings.biometricAuth}
+              onChange={(e) => {
+                updateSetting('biometricAuth', e.target.checked);
+                hapticFeedback('light');
+                showToast(
+                  e.target.checked
+                    ? 'Biometric wallet security gate enabled'
+                    : 'Biometric wallet security gate disabled',
+                  'info'
+                );
+              }}
+              style={{ accentColor: themeTokens.accentPrimary }}
+              className="w-5 h-5 rounded cursor-pointer shrink-0"
+            />
+          </div>
+
+          {/* Update Secure Vault PIN */}
+          <div
+            className="p-3 rounded-2xl border space-y-2"
+            style={{
+              backgroundColor: themeTokens.bgSurface,
+              borderColor: themeTokens.borderDefault,
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: themeTokens.textPrimary }}>
+                <KeyRound className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+                <span>Secure Native Storage PIN</span>
+              </div>
+              <span className="text-[10px] font-mono" style={{ color: themeTokens.textMuted }}>
+                @capacitor/preferences
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                maxLength={4}
+                placeholder="New 4-digit PIN (default 1234)"
+                value={newVaultPin}
+                onChange={(e) => setNewVaultPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                style={{
+                  backgroundColor: themeTokens.bgInput,
+                  borderColor: themeTokens.borderDefault,
+                  color: themeTokens.textPrimary,
+                }}
+                className="flex-1 px-3 py-1.5 rounded-xl border text-xs font-mono focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await nativeBridgeService.updateSecurePin(newVaultPin);
+                  if (ok) {
+                    setNewVaultPin('');
+                    hapticFeedback('success');
+                    showToast('Vault PIN saved to Native Secure Storage', 'success');
+                  } else {
+                    showToast('Enter a 4-digit numeric PIN', 'warning');
+                  }
+                }}
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                }}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition ios-active"
+              >
+                Save PIN
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Native Hardware Test Bench */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                await requestBiometricAuth('Test Android Biometric Sensor & Secure Enclave');
+              }}
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+                color: themeTokens.textPrimary,
+              }}
+              className="p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ios-active"
+            >
+              <Fingerprint className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+              <span>Test Biometrics</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openQRScanner('scan')}
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+                color: themeTokens.textPrimary,
+              }}
+              className="p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ios-active"
+            >
+              <QrCode className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+              <span>Camera & QR</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                hapticFeedback('medium');
+                await sendLocalNotification(
+                  'OmniMini Native Push Alert',
+                  'Scheduled transaction & wallet bridge active on your mobile device.',
+                  1
+                );
+              }}
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+                color: themeTokens.textPrimary,
+              }}
+              className="p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ios-active"
+            >
+              <Bell className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+              <span>Test Notification</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                hapticFeedback('light');
+                await nativeBridgeService.shareContent({
+                  title: 'OmniMini Super App',
+                  text: 'Check out the OmniMini Mobile Super App & Mini App Platform!',
+                  url: window.location.href,
+                });
+                showToast('Native Share Sheet invoked', 'success');
+              }}
+              style={{
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+                color: themeTokens.textPrimary,
+              }}
+              className="p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition ios-active"
+            >
+              <Share2 className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+              <span>Native Share</span>
+            </button>
+          </div>
+
+          {/* Android APK & AAB Packaging Command Reference */}
+          <div
+            className="p-3 rounded-2xl border space-y-1.5"
+            style={{
+              backgroundColor: themeTokens.bgSurface,
+              borderColor: themeTokens.borderDefault,
+            }}
+          >
+            <div className="flex items-center justify-between text-[11px] font-semibold" style={{ color: themeTokens.textPrimary }}>
+              <span className="flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5" style={{ color: themeTokens.accentPrimary }} />
+                <span>Android APK & Play Store AAB Build</span>
+              </span>
+              <span className="font-mono text-[10px]" style={{ color: themeTokens.textMuted }}>
+                CI/CD + Local CLI
+              </span>
+            </div>
+            <div className="font-mono text-[10px] p-2 rounded-xl bg-slate-950 text-emerald-400 select-all overflow-x-auto">
+              npm run android:apk &amp;&amp; npm run android:aab
+            </div>
+          </div>
+
+          {/* Multi-Resolution App Logo & Icon Suite Preview Card */}
+          <div
+            className="p-3.5 rounded-2xl border space-y-2.5"
+            style={{
+              backgroundColor: themeTokens.bgSurface,
+              borderColor: themeTokens.borderDefault,
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="./pwa-192x192.png"
+                  alt="OmniMini Icon"
+                  referrerPolicy="no-referrer"
+                  className="w-9 h-9 rounded-xl shadow-md"
+                />
+                <div>
+                  <div className="text-xs font-bold" style={{ color: themeTokens.textPrimary }}>
+                    App Logo &amp; Multi-Resolution Icon Suite
+                  </div>
+                  <div className="text-[10px]" style={{ color: themeTokens.textSecondary }}>
+                    {LOGO_RESOLUTION_SPECS.length} resolutions (16×16 to 1024×1024, Android Mipmap, iOS &amp; SVG)
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  hapticFeedback('light');
+                  setShowLogoSuiteModal(true);
+                }}
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                }}
+                className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 shrink-0 ios-active shadow-md"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Inspect &amp; Export</span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-1 overflow-x-auto no-scrollbar">
+              {[
+                { label: '16px', src: './favicon-16x16.png', size: 'w-4 h-4' },
+                { label: '32px', src: './favicon-32x32.png', size: 'w-5 h-5' },
+                { label: '72px (hdpi)', src: './icons/icon-72x72.png', size: 'w-6 h-6' },
+                { label: '144px (xxhdpi)', src: './icons/icon-144x144.png', size: 'w-7 h-7' },
+                { label: '180px (iOS)', src: './apple-touch-icon.png', size: 'w-8 h-8' },
+                { label: '192px (PWA)', src: './pwa-192x192.png', size: 'w-9 h-9' },
+                { label: '512px (Maskable)', src: './pwa-maskable-512x512.png', size: 'w-10 h-10 rounded-full' },
+                { label: '1024px (Store)', src: './icons/icon-1024x1024.png', size: 'w-11 h-11' },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  onClick={() => {
+                    hapticFeedback('light');
+                    setShowLogoSuiteModal(true);
+                  }}
+                  className="flex flex-col items-center gap-1 p-1.5 rounded-xl bg-slate-950/50 border border-slate-800/70 shrink-0 hover:border-blue-500/40 transition"
+                >
+                  <img
+                    src={item.src}
+                    alt={item.label}
+                    referrerPolicy="no-referrer"
+                    className={`${item.size} object-contain`}
+                  />
+                  <span className="text-[9px] font-mono text-slate-400">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* PWA & Offline Runtime Section */}
       <div className="space-y-2">
         <span
@@ -1030,6 +1356,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
           </button>
         </div>
       </div>
+
+      <AppLogoSuiteModal
+        isOpen={showLogoSuiteModal}
+        onClose={() => setShowLogoSuiteModal(false)}
+      />
     </div>
   );
 };
