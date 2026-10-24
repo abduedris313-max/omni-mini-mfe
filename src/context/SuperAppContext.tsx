@@ -320,6 +320,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const uninstallApp = (appId: string) => {
+    const targetApp = availableApps.find((a) => a.id === appId);
     const next = installedAppIds.filter((id) => id !== appId);
     setInstalledAppIds(next);
     localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(next));
@@ -329,7 +330,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (activeMiniAppId === appId) {
       setActiveMiniAppId(null);
     }
-    showToast('Mini app uninstalled', 'info');
+    showToast(`${targetApp ? targetApp.name : 'Mini app'} uninstalled`, 'info');
     hapticFeedback('medium');
   };
 

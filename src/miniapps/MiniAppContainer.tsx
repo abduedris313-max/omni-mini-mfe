@@ -22,6 +22,7 @@ import {
   Palette,
   Eye,
   Check,
+  Trash2,
 } from 'lucide-react';
 
 export const MiniAppContainer: React.FC = () => {
@@ -446,6 +447,25 @@ export const MiniAppContainer: React.FC = () => {
               <Share2 className="w-4 h-4 text-cyan-400" />
               <span>Share Mini App Deep Link</span>
             </button>
+
+            {context.isAppInstalled(app.id) && (
+              <button
+                onClick={async () => {
+                  setShowAppMenu(false);
+                  const confirmed = await context.requestConfirm(
+                    `Uninstall "${app.name}"?`,
+                    `Remove "${app.name}" from your Super App Home Screen? You can reinstall it anytime from the App Store.`
+                  );
+                  if (confirmed) {
+                    context.uninstallApp(app.id);
+                  }
+                }}
+                className="w-full p-3 rounded-xl hover:bg-rose-500/15 text-left text-xs font-bold text-rose-400 flex items-center gap-3 transition"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Uninstall Mini App</span>
+              </button>
+            )}
 
             <button
               onClick={() => setShowAppMenu(false)}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useSuperApp } from '../context/SuperAppContext';
-import { Download, Share, PlusSquare, X, CheckCircle2 } from 'lucide-react';
+import { AppLogoSuiteModal, LOGO_RESOLUTION_SPECS } from './AppLogoSuiteModal';
+import { Download, Share, PlusSquare, X, CheckCircle2, Layers } from 'lucide-react';
 
 interface PWAInstallButtonProps {
   className?: string;
@@ -13,15 +14,38 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   variant = 'compact',
 }) => {
   const { isInstallable, isInstalled, install } = usePWAInstall();
-  const { themeTokens } = useSuperApp();
+  const { themeTokens, hapticFeedback } = useSuperApp();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showLogoSuite, setShowLogoSuite] = useState(false);
 
   if (isInstalled) {
     return (
-      <div className={`flex items-center gap-1.5 text-xs font-medium text-emerald-400 ${className}`}>
-        <CheckCircle2 className="w-3.5 h-3.5" />
-        <span>Installed on Device</span>
-      </div>
+      <>
+        <div className={`flex items-center justify-between gap-2 text-xs font-medium text-emerald-400 ${className}`}>
+          <div className="flex items-center gap-1.5">
+            <img
+              src="./pwa-192x192.png"
+              alt="OmniMini App Icon"
+              referrerPolicy="no-referrer"
+              className="w-5 h-5 rounded-md shadow-sm"
+            />
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Installed on Device (PWA Active)</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              hapticFeedback('light');
+              setShowLogoSuite(true);
+            }}
+            className="px-2 py-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-bold flex items-center gap-1"
+          >
+            <Layers className="w-3 h-3" />
+            <span>{LOGO_RESOLUTION_SPECS.length} Icons</span>
+          </button>
+        </div>
+        <AppLogoSuiteModal isOpen={showLogoSuite} onClose={() => setShowLogoSuite(false)} />
+      </>
     );
   }
 
@@ -35,41 +59,81 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           }}
           className={`p-4 rounded-2xl border flex items-center justify-between gap-3 backdrop-blur-md ${className}`}
         >
-          <div className="space-y-0.5">
-            <h4 className="text-sm font-semibold" style={{ color: themeTokens.textPrimary }}>
-              Install OmniMini Super App
-            </h4>
-            <p className="text-xs" style={{ color: themeTokens.textSecondary }}>
-              Add to home screen for native iOS full-screen experience and offline cache.
-            </p>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                hapticFeedback('light');
+                setShowLogoSuite(true);
+              }}
+              title="Inspect Multi-Resolution PWA Icons"
+              className="relative shrink-0 group cursor-pointer"
+            >
+              <img
+                src="./pwa-192x192.png"
+                alt="OmniMini PWA App Icon"
+                referrerPolicy="no-referrer"
+                className="w-11 h-11 rounded-2xl shadow-lg transition-transform group-hover:scale-105"
+              />
+              <span className="absolute -bottom-1 -right-1 px-1 py-0.2 rounded bg-slate-950/90 border border-white/15 text-[8px] font-mono font-bold text-blue-400">
+                {LOGO_RESOLUTION_SPECS.length}x
+              </span>
+            </button>
+            <div className="space-y-0.5 min-w-0">
+              <h4 className="text-sm font-semibold truncate" style={{ color: themeTokens.textPrimary }}>
+                Install OmniMini Super App
+              </h4>
+              <p className="text-xs line-clamp-2" style={{ color: themeTokens.textSecondary }}>
+                Add to home screen with adaptive multi-resolution PWA icons &amp; offline cache.
+              </p>
+            </div>
           </div>
-          {isInstallable ? (
+
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
-              onClick={install}
-              style={{
-                backgroundColor: themeTokens.accentPrimary,
-                color: themeTokens.accentContrast,
-                boxShadow: `0 2px 10px ${themeTokens.accentGlow}`,
+              type="button"
+              onClick={() => {
+                hapticFeedback('light');
+                setShowLogoSuite(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition shrink-0 ios-active"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Install</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowIOSGuide(true)}
               style={{
-                backgroundColor: themeTokens.accentPrimary,
-                color: themeTokens.accentContrast,
-                boxShadow: `0 2px 10px ${themeTokens.accentGlow}`,
+                backgroundColor: themeTokens.bgSurface,
+                borderColor: themeTokens.borderDefault,
+                color: themeTokens.textSecondary,
               }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition shrink-0 ios-active"
+              title="View All Generated App Icon Resolutions"
+              className="p-2 rounded-xl border transition hover:opacity-80 ios-active"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Install Guide</span>
+              <Layers className="w-3.5 h-3.5" />
             </button>
-          )}
+            {isInstallable ? (
+              <button
+                onClick={install}
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                  boxShadow: `0 2px 10px ${themeTokens.accentGlow}`,
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition shrink-0 ios-active"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Install</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowIOSGuide(true)}
+                style={{
+                  backgroundColor: themeTokens.accentPrimary,
+                  color: themeTokens.accentContrast,
+                  boxShadow: `0 2px 10px ${themeTokens.accentGlow}`,
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition shrink-0 ios-active"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Install Guide</span>
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <button
@@ -81,7 +145,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           }}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition ios-active ${className}`}
         >
-          <Download className="w-3.5 h-3.5" />
+          <img
+            src="./favicon-32x32.png"
+            alt="OmniMini"
+            referrerPolicy="no-referrer"
+            className="w-3.5 h-3.5 rounded-sm"
+          />
           <span>{isInstallable ? 'Install App' : 'Add to Home Screen'}</span>
         </button>
       )}
@@ -109,22 +178,18 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </button>
 
             <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg"
-                style={{
-                  backgroundColor: themeTokens.accentPrimary,
-                  color: themeTokens.accentContrast,
-                  boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
-                }}
-              >
-                <Download className="w-6 h-6" />
-              </div>
+              <img
+                src="./apple-touch-icon.png"
+                alt="OmniMini iOS Touch Icon"
+                referrerPolicy="no-referrer"
+                className="w-12 h-12 rounded-2xl shadow-lg"
+              />
               <div>
                 <h3 className="text-base font-bold" style={{ color: themeTokens.textPrimary }}>
                   Install on iPhone / iPad
                 </h3>
                 <p className="text-xs" style={{ color: themeTokens.textSecondary }}>
-                  Fast, offline-ready Super App
+                  Uses 180×180 Apple Touch Icon &amp; offline cache
                 </p>
               </div>
             </div>
@@ -192,6 +257,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           </div>
         </div>
       )}
+
+      <AppLogoSuiteModal isOpen={showLogoSuite} onClose={() => setShowLogoSuite(false)} />
     </>
   );
 };
+

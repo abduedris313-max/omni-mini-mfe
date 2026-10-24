@@ -54,6 +54,8 @@ export const StorePage: React.FC = () => {
     recentAppIds,
     clearRecentApps,
     installApp,
+    uninstallApp,
+    requestConfirm,
     openMiniApp,
     user,
     showToast,
@@ -225,6 +227,18 @@ export const StorePage: React.FC = () => {
       await installApp(appId);
       setDownloadingAppId(null);
     }, 800);
+  };
+
+  const handleUninstallClick = async (app: MiniAppManifest, e: React.MouseEvent) => {
+    e.stopPropagation();
+    hapticFeedback('medium');
+    const confirmed = await requestConfirm(
+      `Uninstall "${app.name}"?`,
+      `Are you sure you want to uninstall "${app.name}" from your Super App Home Screen?`
+    );
+    if (confirmed) {
+      uninstallApp(app.id);
+    }
   };
 
   const handleOpenDetails = async (app: MiniAppManifest) => {
@@ -534,33 +548,51 @@ export const StorePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* iOS GET / OPEN Button */}
-                <button
-                  onClick={(e) => handleInstallClick(app.id, e)}
-                  disabled={isDownloading}
-                  style={
-                    isInstalled
-                      ? {
-                          backgroundColor: themeTokens.bgSurface,
-                          borderColor: themeTokens.borderDefault,
-                          color: themeTokens.accentPrimary,
-                        }
-                      : {
-                          backgroundColor: themeTokens.accentPrimary,
-                          color: themeTokens.accentContrast,
-                          boxShadow: `0 2px 8px ${themeTokens.accentGlow}`,
-                        }
-                  }
-                  className="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide transition shrink-0 ios-active border"
-                >
-                  {isDownloading ? (
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                  ) : isInstalled ? (
-                    'OPEN'
-                  ) : (
-                    'GET'
+                {/* iOS GET / OPEN + UNINSTALL Buttons */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={(e) => handleInstallClick(app.id, e)}
+                    disabled={isDownloading}
+                    style={
+                      isInstalled
+                        ? {
+                            backgroundColor: themeTokens.bgSurface,
+                            borderColor: themeTokens.borderDefault,
+                            color: themeTokens.accentPrimary,
+                          }
+                        : {
+                            backgroundColor: themeTokens.accentPrimary,
+                            color: themeTokens.accentContrast,
+                            boxShadow: `0 2px 8px ${themeTokens.accentGlow}`,
+                          }
+                    }
+                    className="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wide transition shrink-0 ios-active border"
+                  >
+                    {isDownloading ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                    ) : isInstalled ? (
+                      'OPEN'
+                    ) : (
+                      'GET'
+                    )}
+                  </button>
+
+                  {isInstalled && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleUninstallClick(app, e)}
+                      aria-label={`Uninstall ${app.name}`}
+                      title={`Uninstall ${app.name}`}
+                      style={{
+                        backgroundColor: themeTokens.bgSurface,
+                        borderColor: themeTokens.borderDefault,
+                      }}
+                      className="p-2 rounded-full border text-rose-400 hover:bg-rose-500/15 hover:border-rose-500/40 transition ios-active"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             );
           })}
@@ -678,25 +710,38 @@ export const StorePage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Install / Open Action */}
-              <button
-                onClick={(e) => handleInstallClick(selectedApp.id, e)}
-                disabled={downloadingAppId === selectedApp.id}
-                style={{
-                  backgroundColor: themeTokens.accentPrimary,
-                  color: themeTokens.accentContrast,
-                  boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
-                }}
-                className="w-full py-3 rounded-2xl font-extrabold text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 ios-active"
-              >
-                {downloadingAppId === selectedApp.id ? (
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : installedAppIds.includes(selectedApp.id) ? (
-                  'Launch Mini App'
-                ) : (
-                  'Install to Super App'
+              {/* Install / Open / Uninstall Actions */}
+              <div className="flex gap-2">
+                <button
+                  onClick={(e) => handleInstallClick(selectedApp.id, e)}
+                  disabled={downloadingAppId === selectedApp.id}
+                  style={{
+                    backgroundColor: themeTokens.accentPrimary,
+                    color: themeTokens.accentContrast,
+                    boxShadow: `0 4px 14px ${themeTokens.accentGlow}`,
+                  }}
+                  className="flex-1 py-3 rounded-2xl font-extrabold text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 ios-active"
+                >
+                  {downloadingAppId === selectedApp.id ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : installedAppIds.includes(selectedApp.id) ? (
+                    'Launch Mini App'
+                  ) : (
+                    'Install to Super App'
+                  )}
+                </button>
+
+                {installedAppIds.includes(selectedApp.id) && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleUninstallClick(selectedApp, e)}
+                    className="px-4 py-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-extrabold text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 ios-active shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Uninstall</span>
+                  </button>
                 )}
-              </button>
+              </div>
 
               {/* Description */}
               <div className="space-y-1.5">

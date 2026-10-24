@@ -48,6 +48,16 @@ export const LOGO_RESOLUTION_SPECS: LogoResolutionSpec[] = [
     targetUse: 'Apple App Store & Google Play Store Hi-Res Master Icon',
   },
   {
+    id: 'pwa-maskable-1024',
+    label: 'PWA Maskable Master (Ultra-HD)',
+    dimensions: '1024×1024',
+    sizePx: 1024,
+    category: 'pwa',
+    purpose: 'maskable',
+    src: './icons/maskable-icon-1024x1024.png',
+    targetUse: 'Ultra-HD Android & Foldable adaptive launcher icon (15% safe zone)',
+  },
+  {
     id: 'pwa-512',
     label: 'PWA Splash & Store Icon',
     dimensions: '512×512',
@@ -76,6 +86,16 @@ export const LOGO_RESOLUTION_SPECS: LogoResolutionSpec[] = [
     purpose: 'any',
     src: './icons/icon-384x384.png',
     targetUse: 'High-DPI desktop & tablet PWA launcher',
+  },
+  {
+    id: 'pwa-maskable-384',
+    label: 'PWA Maskable Tablet Launcher',
+    dimensions: '384×384',
+    sizePx: 384,
+    category: 'pwa',
+    purpose: 'maskable',
+    src: './icons/maskable-icon-384x384.png',
+    targetUse: 'High-DPI Android tablet adaptive maskable icon',
   },
   {
     id: 'pwa-256',
@@ -308,7 +328,7 @@ export const AppLogoSuiteModal: React.FC<AppLogoSuiteModalProps> = ({ isOpen, on
                 OmniMini Logo &amp; Multi-Resolution Icon Suite
               </h3>
               <p className="text-[11px]" style={{ color: themeTokens.textSecondary }}>
-                23 generated resolutions (16×16 to 1024×1024, Android Mipmap, iOS, PWA &amp; SVG)
+                {LOGO_RESOLUTION_SPECS.length} generated resolutions (16×16 to 1024×1024, Android Mipmap, iOS, PWA &amp; SVG)
               </p>
             </div>
           </div>
@@ -406,7 +426,7 @@ export const AppLogoSuiteModal: React.FC<AppLogoSuiteModalProps> = ({ isOpen, on
           {/* Category Filter Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             {[
-              { id: 'all', label: 'All (23)', icon: Layers },
+              { id: 'all', label: `All (${LOGO_RESOLUTION_SPECS.length})`, icon: Layers },
               { id: 'pwa', label: 'PWA & Store', icon: Globe },
               { id: 'android', label: 'Android Mipmap', icon: Smartphone },
               { id: 'ios', label: 'iOS Touch', icon: Apple },

@@ -347,7 +347,7 @@ fs.mkdirSync(androidIconsDir, { recursive: true });
 const ANY_RESOLUTIONS = [16, 32, 48, 64, 72, 96, 120, 128, 144, 152, 167, 180, 192, 256, 384, 512, 1024];
 
 // Maskable adaptive icon resolutions (with 15% safe zone padding)
-const MASKABLE_RESOLUTIONS = [192, 512];
+const MASKABLE_RESOLUTIONS = [192, 384, 512, 1024];
 
 // Android Capacitor Mipmap density buckets
 const ANDROID_MIPMAP_BUCKETS = [
@@ -388,7 +388,9 @@ fs.writeFileSync(path.join(publicDir, 'favicon.ico'), icoBuffer);
 for (const size of MASKABLE_RESOLUTIONS) {
   const maskBuf = createOmniMiniPNG(size, { maskable: true });
   fs.writeFileSync(path.join(iconsDir, `maskable-icon-${size}x${size}.png`), maskBuf);
-  fs.writeFileSync(path.join(publicDir, `pwa-maskable-${size}x${size}.png`), maskBuf);
+  if (size === 192 || size === 512) {
+    fs.writeFileSync(path.join(publicDir, `pwa-maskable-${size}x${size}.png`), maskBuf);
+  }
 }
 
 // Android Capacitor mipmap density folders
@@ -448,6 +450,74 @@ const maskableSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 51
 `;
 fs.writeFileSync(path.join(publicDir, 'icon-maskable.svg'), maskableSvg);
 
+// Also write static public/manifest.json synchronized with VitePWA manifest
+const manifestJson = {
+  id: './',
+  name: 'OmniMini Super App',
+  short_name: 'OmniMini',
+  description:
+    'Offline-capable Micro Frontend Super App platform with pluggable mini apps, shared wallet, and developer store.',
+  theme_color: '#0f172a',
+  background_color: '#090d16',
+  display: 'standalone',
+  orientation: 'portrait-primary',
+  start_url: './',
+  scope: './',
+  categories: ['productivity', 'finance', 'utilities', 'developer'],
+  icons: [
+    ...ANY_RESOLUTIONS.map((size) => ({
+      src:
+        size === 192
+          ? 'pwa-192x192.png'
+          : size === 512
+          ? 'pwa-512x512.png'
+          : `icons/icon-${size}x${size}.png`,
+      sizes: `${size}x${size}`,
+      type: 'image/png',
+      purpose: 'any',
+    })),
+    {
+      src: 'pwa-maskable-192x192.png',
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+    {
+      src: 'icons/maskable-icon-384x384.png',
+      sizes: '384x384',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+    {
+      src: 'pwa-maskable-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+    {
+      src: 'icons/maskable-icon-1024x1024.png',
+      sizes: '1024x1024',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+    {
+      src: 'icon.svg',
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'any',
+    },
+    {
+      src: 'icon-maskable.svg',
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'maskable',
+    },
+  ],
+};
+
+fs.writeFileSync(path.join(publicDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2) + '\n');
+
 console.log(
-  `Successfully generated ${ANY_RESOLUTIONS.length} standard PNG resolutions, ${MASKABLE_RESOLUTIONS.length} maskable PNGs, multi-size favicon.ico, and ${ANDROID_MIPMAP_BUCKETS.length} Android mipmap density buckets!`
+  `Successfully generated ${ANY_RESOLUTIONS.length} standard PNG resolutions, ${MASKABLE_RESOLUTIONS.length} maskable PNGs, multi-size favicon.ico, public/manifest.json, and ${ANDROID_MIPMAP_BUCKETS.length} Android mipmap density buckets!`
 );
+

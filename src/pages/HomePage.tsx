@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSuperApp } from '../context/SuperAppContext';
 import { PWAInstallButton } from '../components/PWAInstallButton';
+import { AppLogoSuiteModal } from '../components/AppLogoSuiteModal';
 import {
   Search,
   WalletCards,
@@ -20,6 +21,8 @@ import {
   PieChart,
   Boxes,
   User as UserIcon,
+  Minus,
+  Check,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -33,12 +36,32 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
     installedAppIds,
     availableApps,
     openMiniApp,
+    uninstallApp,
+    requestConfirm,
     setCurrentTab,
     hapticFeedback,
     themeTokens,
   } = useSuperApp();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [isEditingApps, setIsEditingApps] = useState(false);
+  const [showLogoSuiteModal, setShowLogoSuiteModal] = useState(false);
+
+  const handleRequestUninstall = async (
+    appId: string,
+    appName: string,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    hapticFeedback('medium');
+    const confirmed = await requestConfirm(
+      `Uninstall "${appName}"?`,
+      `Removing "${appName}" will remove its shortcut from your Super App Home Screen. You can reinstall it anytime from the App Store.`
+    );
+    if (confirmed) {
+      uninstallApp(appId);
+    }
+  };
 
   // Read live persisted FitSync metrics from sandboxed storage (defaults to 0)
   const readFitSyncMetric = (key: string): number => {
@@ -105,19 +128,37 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
     >
       {/* iOS Today Header */}
       <div className="flex items-center justify-between pt-1">
-        <div className="space-y-0.5">
-          <span
-            className="text-[11px] font-bold uppercase tracking-widest"
-            style={{ color: themeTokens.textMuted }}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              hapticFeedback('light');
+              setShowLogoSuiteModal(true);
+            }}
+            title="Inspect OmniMini Multi-Resolution App Icons"
+            className="relative group shrink-0 cursor-pointer"
           >
-            {todayDate}
-          </span>
-          <h1
-            className="text-2xl font-black tracking-tight flex items-center gap-1.5"
-            style={{ color: themeTokens.textPrimary }}
-          >
-            <span>OmniMini Hub</span>
-          </h1>
+            <img
+              src="./icon.svg"
+              alt="OmniMini Logo"
+              referrerPolicy="no-referrer"
+              className="w-10 h-10 rounded-2xl shadow-md transition-transform group-hover:scale-105"
+            />
+          </button>
+          <div className="space-y-0.5">
+            <span
+              className="text-[11px] font-bold uppercase tracking-widest block"
+              style={{ color: themeTokens.textMuted }}
+            >
+              {todayDate}
+            </span>
+            <h1
+              className="text-2xl font-black tracking-tight flex items-center gap-1.5"
+              style={{ color: themeTokens.textPrimary }}
+            >
+              <span>OmniMini Hub</span>
+            </h1>
+          </div>
         </div>
 
         <button
@@ -253,17 +294,45 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
               {installedApps.length}
             </span>
           </div>
-          <button
-            onClick={() => {
-              setCurrentTab('store');
-              hapticFeedback('light');
-            }}
-            className="text-xs font-semibold flex items-center gap-0.5 transition hover:opacity-80"
-            style={{ color: themeTokens.accentPrimary }}
-          >
-            <span>App Store</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            {installedApps.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingApps((prev) => !prev);
+                  hapticFeedback('light');
+                }}
+                style={{
+                  backgroundColor: isEditingApps ? themeTokens.accentPrimary : themeTokens.bgSurface,
+                  borderColor: isEditingApps ? 'transparent' : themeTokens.borderDefault,
+                  color: isEditingApps ? themeTokens.accentContrast : themeTokens.textSecondary,
+                }}
+                className="px-2.5 py-1 rounded-full border text-[11px] font-bold flex items-center gap-1 transition ios-active"
+              >
+                {isEditingApps ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    <span>Done</span>
+                  </>
+                ) : (
+                  <span>Edit</span>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setCurrentTab('store');
+                hapticFeedback('light');
+              }}
+              className="text-xs font-semibold flex items-center gap-0.5 transition hover:opacity-80"
+              style={{ color: themeTokens.accentPrimary }}
+            >
+              <span>App Store</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* iOS Spring Grid */}
@@ -271,17 +340,38 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
           {filteredApps.map((app) => (
             <div
               key={app.id}
-              onClick={() => openMiniApp(app.id)}
-              className="flex flex-col items-center text-center cursor-pointer group ios-active"
+              onClick={() => {
+                if (isEditingApps) return;
+                openMiniApp(app.id);
+              }}
+              className="flex flex-col items-center text-center cursor-pointer group ios-active relative"
             >
-              {/* iOS App Icon Squircle */}
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-150 group-hover:scale-105 relative overflow-hidden"
-                style={{ backgroundColor: app.iconBg }}
-              >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
-                {getAppIcon(app.icon, app.id)}
+              {/* iOS App Icon Squircle Wrapper */}
+              <div className="relative">
+                <div
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-150 group-hover:scale-105 relative overflow-hidden ${
+                    isEditingApps ? 'ring-2 ring-rose-500/40' : ''
+                  }`}
+                  style={{ backgroundColor: app.iconBg }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+                  {getAppIcon(app.icon, app.id)}
+                </div>
+
+                {/* iOS Home Screen Uninstall Badge (- button) */}
+                {isEditingApps && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleRequestUninstall(app.id, app.name, e)}
+                    aria-label={`Uninstall ${app.name}`}
+                    title={`Uninstall ${app.name}`}
+                    className="absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full bg-rose-500 hover:bg-rose-600 text-white shadow-md border-2 border-slate-950 flex items-center justify-center transition transform hover:scale-110 z-10"
+                  >
+                    <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                  </button>
+                )}
               </div>
+
               <span
                 className="text-[11px] font-semibold mt-2 truncate w-full px-1"
                 style={{ color: themeTokens.textPrimary }}
@@ -361,6 +451,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
           </div>
         </div>
       </div>
+
+      <AppLogoSuiteModal
+        isOpen={showLogoSuiteModal}
+        onClose={() => setShowLogoSuiteModal(false)}
+      />
     </div>
   );
 };

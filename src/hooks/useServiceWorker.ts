@@ -454,11 +454,28 @@ export function useServiceWorker() {
       const urlsToCache = [
         './',
         './index.html',
+        './manifest.json',
         './icon.svg',
+        './icon-maskable.svg',
+        './favicon.ico',
+        './favicon-16x16.png',
+        './favicon-32x32.png',
         './apple-touch-icon.png',
         './pwa-192x192.png',
         './pwa-512x512.png',
+        './pwa-maskable-192x192.png',
         './pwa-maskable-512x512.png',
+        './icons/icon-48x48.png',
+        './icons/icon-72x72.png',
+        './icons/icon-96x96.png',
+        './icons/icon-128x128.png',
+        './icons/icon-144x144.png',
+        './icons/icon-152x152.png',
+        './icons/icon-167x167.png',
+        './icons/icon-180x180.png',
+        './icons/icon-256x256.png',
+        './icons/icon-384x384.png',
+        './icons/icon-1024x1024.png',
       ];
 
       await Promise.allSettled(

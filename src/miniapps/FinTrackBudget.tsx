@@ -119,6 +119,26 @@ export interface FinTrackLoan {
   status: 'active' | 'paid' | 'overdue';
 }
 
+export interface LoanLedgerEntry {
+  id: string;
+  loanId: string;
+  loanTitle: string;
+  providerName: string;
+  providerType: 'B2C' | 'P2P';
+  direction: 'borrowed' | 'lent';
+  entryKind: 'principal' | 'repayment';
+  title: string;
+  /** Amount impacting the loan balance (+totalPayable for principal, -repayment for repayment) */
+  amount: number;
+  /** Principal amount disbursed/issued to or from the linked account when entryKind === 'principal' */
+  principalAmount?: number;
+  currency: CurrencyCode;
+  accountId?: string;
+  accountName?: string;
+  date: string;
+  settledViaWallet?: boolean;
+}
+
 export type ScheduleFrequency =
   | 'once'
   | 'daily'
@@ -359,14 +379,17 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     return saved !== null ? Boolean(saved) : true;
   });
 
-  // 4. Ledger Entries State
+  // 4. Ledger 1: Main Balance Ledger State (Bank & Wallet Cashflow Only)
+  const [activeLedgerView, setActiveLedgerView] = useState<'main' | 'loan'>('main');
   const [entries, setEntries] = useState<FinTrackEntry[]>(() => {
     const saved = sdk.storage.getItem('fintrack_entries_v2');
     if (Array.isArray(saved)) {
-      return saved.map((e: any) => ({
-        ...e,
-        currency: normalizeCurrencyCode(e.currency || 'ETB'),
-      }));
+      return saved
+        .filter((e: any) => !e.loanId && e.category !== 'Loan')
+        .map((e: any) => ({
+          ...e,
+          currency: normalizeCurrencyCode(e.currency || 'ETB'),
+        }));
     }
     return [];
   });
@@ -374,7 +397,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [showAddTxForm, setShowAddTxForm] = useState(false);
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
 
-  // New / Edit Transaction Form
+  // New / Edit Main Balance Transaction Form
   const [txTitle, setTxTitle] = useState('');
   const [txAmount, setTxAmount] = useState('');
   const [txCurrency, setTxCurrency] = useState<CurrencyCode>('ETB');
@@ -384,7 +407,28 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [txDate, setTxDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [chargeSuperAppWallet, setChargeSuperAppWallet] = useState(false);
 
-  // 5. Loan Providers (P2P & B2C) and Loan Tracking State
+  // 5. Ledger 2: Loan Balance Ledger State & Loan Providers (P2P & B2C)
+  const [loanLedgerEntries, setLoanLedgerEntries] = useState<LoanLedgerEntry[]>(() => {
+    const saved = sdk.storage.getItem('fintrack_loan_ledger_v3');
+    if (Array.isArray(saved)) {
+      return saved.map((e: any) => ({
+        ...e,
+        currency: normalizeCurrencyCode(e.currency || 'ETB'),
+      }));
+    }
+    return [];
+  });
+  const [loanLedgerFilter, setLoanLedgerFilter] = useState<
+    'ALL' | 'borrowed' | 'lent' | 'principal' | 'repayment'
+  >('ALL');
+  const [showAddLoanLedgerForm, setShowAddLoanLedgerForm] = useState(false);
+  const [editingLoanLedgerId, setEditingLoanLedgerId] = useState<string | null>(null);
+  const [llTargetLoanId, setLlTargetLoanId] = useState<string>('');
+  const [llTitle, setLlTitle] = useState<string>('');
+  const [llAmount, setLlAmount] = useState<string>('');
+  const [llAccountId, setLlAccountId] = useState<string>(() => accounts[0]?.id || '');
+  const [llDate, setLlDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+
   const [loanProviders, setLoanProviders] = useState<LoanProvider[]>(() => {
     const saved = sdk.storage.getItem('fintrack_loan_providers_v3');
     return Array.isArray(saved) ? saved : [];
@@ -481,12 +525,18 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   const [newGoalTarget, setNewGoalTarget] = useState('');
   const [newGoalCurrency, setNewGoalCurrency] = useState<CurrencyCode>('ETB');
 
-  // Ensure every loan (including previously created loans) is synced to the Transactions Ledger
+  // Ensure Main Balance Ledger (`entries`) only holds main balance transactions
+  // and every loan (including previously created loans) is synced to the dedicated Loan Balance Ledger (`loanLedgerEntries`)
   useEffect(() => {
+    setEntries((prev) => {
+      const cleaned = prev.filter((e) => !e.loanId && e.category !== 'Loan');
+      return cleaned.length !== prev.length ? cleaned : prev;
+    });
+
     if (loans.length === 0) return;
 
-    setEntries((prevEntries) => {
-      let updated = [...prevEntries];
+    setLoanLedgerEntries((prevLoanEntries) => {
+      let updated = [...prevLoanEntries];
       let mutated = false;
 
       for (const loan of loans) {
@@ -494,87 +544,59 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
           ? accounts.find((a) => a.id === loan.accountId)
           : undefined;
 
-        // 1. Check for principal disbursement / issuance entry
+        // 1. Check for principal disbursement / issuance entry in Loan Balance Ledger
         const existingPrincipalIndex = updated.findIndex(
-          (e) =>
-            (e.loanId === loan.id && e.loanEntryKind === 'principal') ||
-            (!e.loanId &&
-              e.category === 'Loan' &&
-              (e.title.includes(`Loan Disbursed: ${loan.title}`) ||
-                e.title.includes(`Loan Issued: ${loan.title}`)))
+          (e) => e.loanId === loan.id && e.entryKind === 'principal'
         );
 
         if (existingPrincipalIndex === -1) {
-          const principalEntry: FinTrackEntry = {
-            id: `ft-loan-init-${loan.id}`,
+          const principalEntry: LoanLedgerEntry = {
+            id: `ll-init-${loan.id}`,
+            loanId: loan.id,
+            loanTitle: loan.title,
+            providerName: loan.providerName,
+            providerType: loan.providerType,
+            direction: loan.direction,
+            entryKind: 'principal',
             title:
               loan.direction === 'borrowed'
                 ? `Loan Disbursed: ${loan.title} (${loan.providerName})`
                 : `P2P Loan Issued: ${loan.title} (${loan.providerName})`,
-            amount: loan.principalAmount,
+            amount: loan.totalPayable,
+            principalAmount: loan.principalAmount,
             currency: loan.currency,
-            type: loan.direction === 'borrowed' ? 'income' : 'expense',
-            category: 'Loan',
             accountId: linkedAcc?.id || loan.accountId,
             accountName: linkedAcc?.name,
-            loanId: loan.id,
-            loanEntryKind: 'principal',
             date: loan.startDate || new Date().toISOString().slice(0, 10),
           };
           updated = [principalEntry, ...updated];
-          mutated = true;
-        } else if (!updated[existingPrincipalIndex].loanId) {
-          updated[existingPrincipalIndex] = {
-            ...updated[existingPrincipalIndex],
-            loanId: loan.id,
-            loanEntryKind: 'principal',
-          };
           mutated = true;
         }
 
         // 2. Check for repayment / collection entries if paidAmount > 0
         if (loan.paidAmount > 0) {
           const repaymentEntries = updated.filter(
-            (e) =>
-              (e.loanId === loan.id && e.loanEntryKind === 'repayment') ||
-              (!e.loanId &&
-                e.category === 'Loan' &&
-                (e.title.includes(`Loan Repayment: ${loan.title}`) ||
-                  e.title.includes(`Loan Collection: ${loan.title}`)))
+            (e) => e.loanId === loan.id && e.entryKind === 'repayment'
           );
-
           const recordedPaid = repaymentEntries.reduce((sum, e) => sum + e.amount, 0);
-          if (repaymentEntries.length > 0) {
-            updated = updated.map((e) => {
-              if (
-                !e.loanId &&
-                e.category === 'Loan' &&
-                (e.title.includes(`Loan Repayment: ${loan.title}`) ||
-                  e.title.includes(`Loan Collection: ${loan.title}`))
-              ) {
-                mutated = true;
-                return { ...e, loanId: loan.id, loanEntryKind: 'repayment' };
-              }
-              return e;
-            });
-          }
-
           const unrecordedPaid = Number((loan.paidAmount - recordedPaid).toFixed(2));
           if (unrecordedPaid >= 0.01) {
-            const repayEntry: FinTrackEntry = {
-              id: `ft-loan-repay-sync-${loan.id}-${Date.now()}`,
+            const repayEntry: LoanLedgerEntry = {
+              id: `ll-repay-sync-${loan.id}-${Date.now()}`,
+              loanId: loan.id,
+              loanTitle: loan.title,
+              providerName: loan.providerName,
+              providerType: loan.providerType,
+              direction: loan.direction,
+              entryKind: 'repayment',
               title:
                 loan.direction === 'borrowed'
                   ? `Loan Repayment: ${loan.title} (${loan.providerName})`
                   : `Loan Collection: ${loan.title} (${loan.providerName})`,
               amount: unrecordedPaid,
               currency: loan.currency,
-              type: loan.direction === 'borrowed' ? 'expense' : 'income',
-              category: 'Loan',
               accountId: linkedAcc?.id || loan.accountId,
               accountName: linkedAcc?.name,
-              loanId: loan.id,
-              loanEntryKind: 'repayment',
               date: new Date().toISOString().slice(0, 10),
             };
             updated = [repayEntry, ...updated];
@@ -583,7 +605,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         }
       }
 
-      return mutated ? updated : prevEntries;
+      return mutated ? updated : prevLoanEntries;
     });
   }, [loans, accounts]);
 
@@ -607,6 +629,10 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
   useEffect(() => {
     sdk.storage.setItem('fintrack_entries_v2', entries);
   }, [entries, sdk.storage]);
+
+  useEffect(() => {
+    sdk.storage.setItem('fintrack_loan_ledger_v3', loanLedgerEntries);
+  }, [loanLedgerEntries, sdk.storage]);
 
   useEffect(() => {
     sdk.storage.setItem('fintrack_loan_providers_v3', loanProviders);
@@ -706,6 +732,14 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         byCategory[e.category] = (byCategory[e.category] || 0) + amtBase;
       });
 
+    const totalPrincipalIssuedBase = loanLedgerEntries
+      .filter((e) => e.entryKind === 'principal')
+      .reduce((sum, e) => sum + convertAmount(e.amount, e.currency, baseCurrency), 0);
+
+    const totalLoanRepaymentsBase = loanLedgerEntries
+      .filter((e) => e.entryKind === 'repayment')
+      .reduce((sum, e) => sum + convertAmount(e.amount, e.currency, baseCurrency), 0);
+
     return {
       totalBankBase,
       totalWalletBase,
@@ -718,11 +752,13 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       netCashflowBase,
       activeBorrowedBase,
       activeLentBase,
+      totalPrincipalIssuedBase,
+      totalLoanRepaymentsBase,
       netWorthBase,
       budgetUsedPercent,
       byCategory,
     };
-  }, [accounts, entries, loans, baseCurrency, convertAmount, monthlyBudgetLimit]);
+  }, [accounts, entries, loans, loanLedgerEntries, baseCurrency, convertAmount, monthlyBudgetLimit]);
 
   // Synchronize Shared Accounts Balance to SuperApp Shared Wallet
   const pushSharedBalanceToSuperApp = useCallback(
@@ -1625,9 +1661,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       loanDirection === 'borrowed'
         ? `Loan Disbursed: ${loanTitle.trim()} (${provider.name})`
         : `P2P Loan Issued: ${loanTitle.trim()} (${provider.name})`;
-    const entryType: 'income' | 'expense' = loanDirection === 'borrowed' ? 'income' : 'expense';
 
-    // UPDATE EXISTING LOAN (Auto-syncing with Ledger & Account Balance)
+    // UPDATE EXISTING LOAN (Auto-syncing with Loan Balance Ledger & Account Balance)
     if (editingLoanId) {
       const oldLoan = loans.find((l) => l.id === editingLoanId);
       if (!oldLoan) {
@@ -1635,8 +1670,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
         return;
       }
 
-      const existingPrincipalEntry = entries.find(
-        (item) => item.loanId === editingLoanId && item.loanEntryKind === 'principal'
+      const existingPrincipalEntry = loanLedgerEntries.find(
+        (item) => item.loanId === editingLoanId && item.entryKind === 'principal'
       );
 
       const adjustments: Array<{
@@ -1689,47 +1724,64 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
 
       setLoans((prev) => prev.map((l) => (l.id === editingLoanId ? updatedLoan : l)));
 
-      // Update or insert the principal entry in the Transactions Ledger
-      setEntries((prev) => {
-        if (existingPrincipalEntry) {
-          return prev.map((item) =>
-            item.id === existingPrincipalEntry.id
-              ? {
-                  ...item,
-                  title: entryTitle,
-                  amount: principal,
-                  currency: loanCurrency,
-                  type: entryType,
-                  category: 'Loan',
-                  accountId: targetAcc?.id,
-                  accountName: targetAcc?.name,
-                }
-              : item
-          );
+      // Update or insert the principal entry in the Loan Balance Ledger (and update loan metadata on its repayment entries)
+      setLoanLedgerEntries((prev) => {
+        const updatedList = prev.map((item) => {
+          if (item.loanId !== editingLoanId) return item;
+          if (item.entryKind === 'principal') {
+            return {
+              ...item,
+              loanTitle: updatedLoan.title,
+              providerName: provider.name,
+              providerType: provider.providerType,
+              direction: loanDirection,
+              title: entryTitle,
+              amount: totalPayable,
+              principalAmount: principal,
+              currency: loanCurrency,
+              accountId: targetAcc?.id,
+              accountName: targetAcc?.name,
+            };
+          }
+          return {
+            ...item,
+            loanTitle: updatedLoan.title,
+            providerName: provider.name,
+            providerType: provider.providerType,
+            direction: loanDirection,
+            currency: loanCurrency,
+          };
+        });
+
+        if (!existingPrincipalEntry) {
+          const newPrincipalEntry: LoanLedgerEntry = {
+            id: `ll-init-${editingLoanId}`,
+            loanId: editingLoanId,
+            loanTitle: updatedLoan.title,
+            providerName: provider.name,
+            providerType: provider.providerType,
+            direction: loanDirection,
+            entryKind: 'principal',
+            title: entryTitle,
+            amount: totalPayable,
+            principalAmount: principal,
+            currency: loanCurrency,
+            accountId: targetAcc?.id,
+            accountName: targetAcc?.name,
+            date: oldLoan.startDate || new Date().toISOString().slice(0, 10),
+          };
+          return [newPrincipalEntry, ...updatedList];
         }
-        const newLedgerEntry: FinTrackEntry = {
-          id: `ft-loan-init-${editingLoanId}`,
-          title: entryTitle,
-          amount: principal,
-          currency: loanCurrency,
-          type: entryType,
-          category: 'Loan',
-          accountId: targetAcc?.id,
-          accountName: targetAcc?.name,
-          loanId: editingLoanId,
-          loanEntryKind: 'principal',
-          date: oldLoan.startDate || new Date().toISOString().slice(0, 10),
-        };
-        return [newLedgerEntry, ...prev];
+        return updatedList;
       });
 
       resetLoanForm();
       sdk.ui.hapticFeedback('success');
-      sdk.ui.showToast(`Updated loan & synced ledger: ${updatedLoan.title}`, 'success');
+      sdk.ui.showToast(`Updated loan & synced Loan Balance Ledger: ${updatedLoan.title}`, 'success');
       return;
     }
 
-    // CREATE NEW LOAN (Always records in Ledger & syncs linked Account Balance)
+    // CREATE NEW LOAN (Always records in Loan Balance Ledger & syncs linked Account Balance)
     const newLoanId = `loan-${Date.now()}`;
     const todayStr = new Date().toISOString().slice(0, 10);
     const newLoan: FinTrackLoan = {
@@ -1766,60 +1818,77 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       );
     }
 
-    // Always sync the loan transaction to the FinTrack Ledger
-    const principalLedgerEntry: FinTrackEntry = {
-      id: `ft-loan-init-${newLoanId}`,
+    // Always sync the loan obligation to the dedicated Loan Balance Ledger
+    const principalLoanLedgerEntry: LoanLedgerEntry = {
+      id: `ll-init-${newLoanId}`,
+      loanId: newLoanId,
+      loanTitle: newLoan.title,
+      providerName: provider.name,
+      providerType: provider.providerType,
+      direction: loanDirection,
+      entryKind: 'principal',
       title: entryTitle,
-      amount: principal,
+      amount: totalPayable,
+      principalAmount: principal,
       currency: loanCurrency,
-      type: entryType,
-      category: 'Loan',
       accountId: targetAcc?.id,
       accountName: targetAcc?.name,
-      loanId: newLoanId,
-      loanEntryKind: 'principal',
       date: todayStr,
     };
-    setEntries((prev) => [principalLedgerEntry, ...prev]);
+    setLoanLedgerEntries((prev) => [principalLoanLedgerEntry, ...prev]);
 
     resetLoanForm();
     sdk.ui.hapticFeedback('success');
     sdk.ui.showToast(
-      `Synced ${provider.providerType} loan to ledger: ${formatMoney(totalPayable, loanCurrency)}`,
+      `Synced ${provider.providerType} loan to Loan Balance Ledger: ${formatMoney(
+        totalPayable,
+        loanCurrency
+      )}`,
       'success'
     );
   };
 
   const handleDeleteLoan = (loanId: string) => {
-    const linkedEntries = entries.filter((e) => e.loanId === loanId);
+    const linkedLoanEntries = loanLedgerEntries.filter((e) => e.loanId === loanId);
     const adjustments: Array<{
       accountId?: string;
       deltaAmount: number;
       deltaCurrency: CurrencyCode;
     }> = [];
 
-    for (const entry of linkedEntries) {
+    for (const entry of linkedLoanEntries) {
       if (entry.accountId) {
-        const reverseDelta = entry.type === 'income' ? -entry.amount : entry.amount;
-        adjustments.push({
-          accountId: entry.accountId,
-          deltaAmount: reverseDelta,
-          deltaCurrency: entry.currency,
-        });
+        if (entry.entryKind === 'principal') {
+          const cashAmt = entry.principalAmount ?? entry.amount;
+          const reverseDelta = entry.direction === 'borrowed' ? -cashAmt : cashAmt;
+          adjustments.push({
+            accountId: entry.accountId,
+            deltaAmount: reverseDelta,
+            deltaCurrency: entry.currency,
+          });
+        } else {
+          // Repayment: borrowed repayment deducted from account (so reverse is +amount); lent collection credited account (reverse is -amount)
+          const reverseDelta = entry.direction === 'borrowed' ? entry.amount : -entry.amount;
+          adjustments.push({
+            accountId: entry.accountId,
+            deltaAmount: reverseDelta,
+            deltaCurrency: entry.currency,
+          });
+        }
       }
     }
 
     if (adjustments.length > 0) {
-      applyAccountBalanceAdjustments(adjustments, 'Loan Removed & Balance Restored');
+      applyAccountBalanceAdjustments(adjustments, 'Loan Removed & Account Balance Restored');
     }
 
-    setEntries((prev) => prev.filter((e) => e.loanId !== loanId));
+    setLoanLedgerEntries((prev) => prev.filter((e) => e.loanId !== loanId));
     setLoans((prev) => prev.filter((item) => item.id !== loanId));
     if (editingLoanId === loanId) {
       resetLoanForm();
     }
     sdk.ui.hapticFeedback('medium');
-    sdk.ui.showToast('Loan removed & linked ledger/account balances updated', 'info');
+    sdk.ui.showToast('Loan removed & Loan Balance Ledger / Account balances updated', 'info');
   };
 
   const handleRecordLoanRepayment = async (e: React.FormEvent) => {
@@ -1872,30 +1941,289 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       })
     );
 
-    const ledgerEntry: FinTrackEntry = {
-      id: `ft-loan-repay-${Date.now()}`,
+    const loanLedgerRepayEntry: LoanLedgerEntry = {
+      id: `ll-repay-${Date.now()}`,
+      loanId: repayLoanTarget.id,
+      loanTitle: repayLoanTarget.title,
+      providerName: repayLoanTarget.providerName,
+      providerType: repayLoanTarget.providerType,
+      direction: repayLoanTarget.direction,
+      entryKind: 'repayment',
       title: repayTitle,
       amount: actualPay,
       currency: repayLoanTarget.currency,
-      type: repayLoanTarget.direction === 'borrowed' ? 'expense' : 'income',
-      category: 'Loan',
       accountId: targetAcc?.id,
       accountName:
         targetAcc?.name || (repayAccountId === 'SUPERAPP_WALLET' ? 'SuperApp Wallet' : undefined),
-      loanId: repayLoanTarget.id,
-      loanEntryKind: 'repayment',
       date: new Date().toISOString().slice(0, 10),
       settledViaWallet: repayAccountId === 'SUPERAPP_WALLET',
     };
-    setEntries((prev) => [ledgerEntry, ...prev]);
+    setLoanLedgerEntries((prev) => [loanLedgerRepayEntry, ...prev]);
 
     setRepayLoanTarget(null);
     setRepayAmount('');
     sdk.ui.hapticFeedback('success');
     sdk.ui.showToast(
-      `Synced ${formatMoney(actualPay, repayLoanTarget.currency)} loan settlement to ledger`,
+      `Synced ${formatMoney(actualPay, repayLoanTarget.currency)} settlement to Loan Balance Ledger`,
       'success'
     );
+  };
+
+  // Handlers: Dedicated Loan Balance Ledger CRUD (Record Repayment, Edit Entry, Delete Entry)
+  const startEditLoanLedgerEntry = (entry: LoanLedgerEntry) => {
+    setEditingLoanLedgerId(entry.id);
+    setLlTargetLoanId(entry.loanId);
+    setLlTitle(entry.title);
+    setLlAmount(String(entry.entryKind === 'principal' ? entry.principalAmount ?? entry.amount : entry.amount));
+    setLlAccountId(entry.accountId || 'NONE');
+    setLlDate(entry.date || new Date().toISOString().slice(0, 10));
+    setShowAddLoanLedgerForm(true);
+    sdk.ui.hapticFeedback('light');
+  };
+
+  const resetLoanLedgerForm = () => {
+    setEditingLoanLedgerId(null);
+    setLlTitle('');
+    setLlAmount('');
+    setLlDate(new Date().toISOString().slice(0, 10));
+    setShowAddLoanLedgerForm(false);
+  };
+
+  const handleSaveLoanLedgerEntry = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmt = parseFloat(llAmount);
+    if (!Number.isFinite(numericAmt) || numericAmt <= 0) {
+      sdk.ui.showToast('Enter a valid positive amount for the loan ledger entry', 'warning');
+      return;
+    }
+
+    const targetAcc =
+      llAccountId && llAccountId !== 'NONE'
+        ? accounts.find((a) => a.id === llAccountId)
+        : undefined;
+
+    // 1. UPDATE EXISTING LOAN BALANCE LEDGER ENTRY
+    if (editingLoanLedgerId) {
+      const oldEntry = loanLedgerEntries.find((item) => item.id === editingLoanLedgerId);
+      if (!oldEntry) {
+        resetLoanLedgerForm();
+        return;
+      }
+
+      const targetLoan = loans.find((l) => l.id === oldEntry.loanId);
+      const adjustments: Array<{
+        accountId?: string;
+        deltaAmount: number;
+        deltaCurrency: CurrencyCode;
+      }> = [];
+
+      if (oldEntry.entryKind === 'principal') {
+        const oldCashAmt = oldEntry.principalAmount ?? oldEntry.amount;
+        if (oldEntry.accountId) {
+          adjustments.push({
+            accountId: oldEntry.accountId,
+            deltaAmount: oldEntry.direction === 'borrowed' ? -oldCashAmt : oldCashAmt,
+            deltaCurrency: oldEntry.currency,
+          });
+        }
+        if (targetAcc) {
+          adjustments.push({
+            accountId: targetAcc.id,
+            deltaAmount: oldEntry.direction === 'borrowed' ? numericAmt : -numericAmt,
+            deltaCurrency: oldEntry.currency,
+          });
+        }
+      } else {
+        // Repayment entry
+        if (oldEntry.accountId) {
+          adjustments.push({
+            accountId: oldEntry.accountId,
+            deltaAmount: oldEntry.direction === 'borrowed' ? oldEntry.amount : -oldEntry.amount,
+            deltaCurrency: oldEntry.currency,
+          });
+        }
+        if (targetAcc) {
+          adjustments.push({
+            accountId: targetAcc.id,
+            deltaAmount: oldEntry.direction === 'borrowed' ? -numericAmt : numericAmt,
+            deltaCurrency: oldEntry.currency,
+          });
+        }
+      }
+
+      if (adjustments.length > 0) {
+        applyAccountBalanceAdjustments(
+          adjustments,
+          `Loan Balance Ledger Updated: ${llTitle.trim() || oldEntry.title}`
+        );
+      }
+
+      const newTotalPayable =
+        oldEntry.entryKind === 'principal' && targetLoan
+          ? Number((numericAmt * (1 + Math.max(0, targetLoan.interestRate) / 100)).toFixed(2))
+          : numericAmt;
+
+      // Sync the underlying Loan record
+      setLoans((prevLoans) =>
+        prevLoans.map((loan) => {
+          if (loan.id !== oldEntry.loanId) return loan;
+          if (oldEntry.entryKind === 'principal') {
+            return {
+              ...loan,
+              principalAmount: numericAmt,
+              totalPayable: newTotalPayable,
+              accountId: targetAcc?.id,
+              status: loan.paidAmount >= newTotalPayable - 0.01 ? 'paid' : 'active',
+            };
+          }
+          const nextPaid = Math.max(
+            0,
+            Math.min(
+              loan.totalPayable,
+              Number((loan.paidAmount - oldEntry.amount + numericAmt).toFixed(2))
+            )
+          );
+          return {
+            ...loan,
+            paidAmount: nextPaid,
+            status: nextPaid >= loan.totalPayable - 0.01 ? 'paid' : 'active',
+          };
+        })
+      );
+
+      setLoanLedgerEntries((prev) =>
+        prev.map((item) =>
+          item.id === editingLoanLedgerId
+            ? {
+                ...item,
+                title: llTitle.trim() || item.title,
+                amount: oldEntry.entryKind === 'principal' ? newTotalPayable : numericAmt,
+                principalAmount:
+                  oldEntry.entryKind === 'principal' ? numericAmt : item.principalAmount,
+                accountId: targetAcc?.id,
+                accountName: targetAcc?.name,
+                date: llDate || item.date,
+              }
+            : item
+        )
+      );
+
+      resetLoanLedgerForm();
+      sdk.ui.hapticFeedback('success');
+      sdk.ui.showToast('Updated Loan Balance Ledger entry & synced loan/account balance', 'success');
+      return;
+    }
+
+    // 2. RECORD NEW LOAN REPAYMENT / SETTLEMENT DIRECTLY IN LOAN BALANCE LEDGER
+    const selectedLoan = loans.find((l) => l.id === llTargetLoanId) || loans[0];
+    if (!selectedLoan) {
+      sdk.ui.showToast('Create a loan first in the Loans tab', 'warning');
+      return;
+    }
+
+    const remaining = Math.max(0, selectedLoan.totalPayable - selectedLoan.paidAmount);
+    const actualPay = remaining > 0 ? Math.min(remaining, numericAmt) : numericAmt;
+    const defaultTitle =
+      selectedLoan.direction === 'borrowed'
+        ? `Loan Repayment: ${selectedLoan.title} (${selectedLoan.providerName})`
+        : `Loan Collection: ${selectedLoan.title} (${selectedLoan.providerName})`;
+    const finalTitle = llTitle.trim() || defaultTitle;
+
+    if (targetAcc) {
+      const signedInLoanCurr = selectedLoan.direction === 'borrowed' ? -actualPay : actualPay;
+      applyAccountBalanceAdjustments(
+        [
+          {
+            accountId: targetAcc.id,
+            deltaAmount: signedInLoanCurr,
+            deltaCurrency: selectedLoan.currency,
+          },
+        ],
+        finalTitle
+      );
+    }
+
+    setLoans((prev) =>
+      prev.map((l) => {
+        if (l.id !== selectedLoan.id) return l;
+        const nextPaid = Math.min(l.totalPayable, Number((l.paidAmount + actualPay).toFixed(2)));
+        return {
+          ...l,
+          paidAmount: nextPaid,
+          status: nextPaid >= l.totalPayable - 0.01 ? 'paid' : 'active',
+        };
+      })
+    );
+
+    const newEntry: LoanLedgerEntry = {
+      id: `ll-repay-${Date.now()}`,
+      loanId: selectedLoan.id,
+      loanTitle: selectedLoan.title,
+      providerName: selectedLoan.providerName,
+      providerType: selectedLoan.providerType,
+      direction: selectedLoan.direction,
+      entryKind: 'repayment',
+      title: finalTitle,
+      amount: actualPay,
+      currency: selectedLoan.currency,
+      accountId: targetAcc?.id,
+      accountName: targetAcc?.name,
+      date: llDate || new Date().toISOString().slice(0, 10),
+    };
+
+    setLoanLedgerEntries((prev) => [newEntry, ...prev]);
+    resetLoanLedgerForm();
+    sdk.ui.hapticFeedback('success');
+    sdk.ui.showToast(
+      `Recorded ${formatMoney(actualPay, selectedLoan.currency)} in Loan Balance Ledger`,
+      'success'
+    );
+  };
+
+  const handleDeleteLoanLedgerEntry = (id: string) => {
+    const targetEntry = loanLedgerEntries.find((item) => item.id === id);
+    if (!targetEntry) return;
+
+    // If deleting a principal entry, delete the entire loan and reverse all its linked entries
+    if (targetEntry.entryKind === 'principal') {
+      handleDeleteLoan(targetEntry.loanId);
+      return;
+    }
+
+    sdk.ui.hapticFeedback('medium');
+    if (targetEntry.accountId) {
+      const reverseDelta =
+        targetEntry.direction === 'borrowed' ? targetEntry.amount : -targetEntry.amount;
+      applyAccountBalanceAdjustments(
+        [
+          {
+            accountId: targetEntry.accountId,
+            deltaAmount: reverseDelta,
+            deltaCurrency: targetEntry.currency,
+          },
+        ],
+        `Reversed Loan Settlement: ${targetEntry.title}`
+      );
+    }
+
+    setLoans((prevLoans) =>
+      prevLoans.map((loan) => {
+        if (loan.id !== targetEntry.loanId) return loan;
+        const nextPaid = Math.max(0, Number((loan.paidAmount - targetEntry.amount).toFixed(2)));
+        return {
+          ...loan,
+          paidAmount: nextPaid,
+          status: nextPaid >= loan.totalPayable - 0.01 ? 'paid' : 'active',
+        };
+      })
+    );
+
+    if (editingLoanLedgerId === id) {
+      resetLoanLedgerForm();
+    }
+
+    setLoanLedgerEntries((prev) => prev.filter((item) => item.id !== id));
+    sdk.ui.showToast('Loan settlement removed & loan/account balances restored', 'info');
   };
 
   // Handlers: Scheduled Transactions
@@ -2011,6 +2339,14 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
     if (selectedCategoryFilter === 'ALL') return entries;
     return entries.filter((e) => e.category === selectedCategoryFilter);
   }, [entries, selectedCategoryFilter]);
+
+  const filteredLoanLedgerEntries = useMemo(() => {
+    if (loanLedgerFilter === 'ALL') return loanLedgerEntries;
+    if (loanLedgerFilter === 'borrowed' || loanLedgerFilter === 'lent') {
+      return loanLedgerEntries.filter((e) => e.direction === loanLedgerFilter);
+    }
+    return loanLedgerEntries.filter((e) => e.entryKind === loanLedgerFilter);
+  }, [loanLedgerEntries, loanLedgerFilter]);
 
   const filteredProviders = useMemo(() => {
     if (providerTypeFilter === 'ALL') return loanProviders;
@@ -2815,6 +3151,7 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                             setTxAccountId(acc.id);
                             setTxCurrency(acc.currency);
                             setShowAddTxForm(true);
+                            setActiveLedgerView('main');
                             setActiveTab('ledger');
                             sdk.ui.hapticFeedback('light');
                           }}
@@ -2866,408 +3203,936 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
       )}
 
       {/* =====================================================================
-          TAB 2: TRANSACTIONS LEDGER (MULTI-CURRENCY + ACCOUNT LINKED)
+          TAB 2: TWO SEPARATE LEDGERS
+          - LEDGER 1: MAIN BALANCE LEDGER (Bank & Wallet Cashflow Tracking)
+          - LEDGER 2: LOAN BALANCE LEDGER (Borrowed Debt & P2P Lent Balance Tracking)
          ===================================================================== */}
       {activeTab === 'ledger' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            {/* Category Filter Buttons */}
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
-              {(
-                [
-                  'ALL',
-                  'Loan',
-                  'Transfer',
-                  'Salary',
-                  'Business',
-                  'Income',
-                  'Housing',
-                  'Dining',
-                  'Transit',
-                  'Utilities',
-                  'Subscriptions',
-                  'Shopping',
-                ] as const
-              ).map((cat) => {
-                const active = selectedCategoryFilter === cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategoryFilter(cat);
-                      sdk.ui.hapticFeedback('light');
-                    }}
-                    style={{
-                      backgroundColor: active ? tokens.accentPrimary : tokens.bgSurface,
-                      color: active ? tokens.accentContrast : tokens.textSecondary,
-                      borderColor: active ? 'transparent' : tokens.borderDefault,
-                    }}
-                    className="px-3 py-1.5 rounded-xl border text-[11px] font-semibold whitespace-nowrap shrink-0 transition"
-                  >
-                    {cat === 'ALL' ? 'All Activity' : cat}
-                  </button>
-                );
-              })}
-            </div>
+          {/* 2-Ledger Segmented Switcher */}
+          <div
+            style={{
+              backgroundColor: tokens.bgSurface,
+              borderColor: tokens.borderDefault,
+            }}
+            className="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl border"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setActiveLedgerView('main');
+                sdk.ui.hapticFeedback('light');
+              }}
+              style={{
+                backgroundColor: activeLedgerView === 'main' ? tokens.accentPrimary : 'transparent',
+                color: activeLedgerView === 'main' ? tokens.accentContrast : tokens.textSecondary,
+              }}
+              className="py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            >
+              <Landmark className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Main Balance Ledger ({entries.length})</span>
+            </button>
 
             <button
               type="button"
               onClick={() => {
-                if (showAddTxForm && !editingTxId) {
-                  resetTransactionForm();
-                } else {
-                  setEditingTxId(null);
-                  setTxTitle('');
-                  setTxAmount('');
-                  setTxDate(new Date().toISOString().slice(0, 10));
-                  if ((!txAccountId || txAccountId === 'NONE') && accounts[0]) {
-                    setTxAccountId(accounts[0].id);
-                  }
-                  setShowAddTxForm(true);
-                }
+                setActiveLedgerView('loan');
+                sdk.ui.hapticFeedback('light');
               }}
               style={{
-                backgroundColor: tokens.accentPrimary,
-                color: tokens.accentContrast,
+                backgroundColor: activeLedgerView === 'loan' ? tokens.accentPrimary : 'transparent',
+                color: activeLedgerView === 'loan' ? tokens.accentContrast : tokens.textSecondary,
               }}
-              className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+              className="py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Record</span>
+              <Briefcase className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Loan Balance Ledger ({loanLedgerEntries.length})</span>
             </button>
           </div>
 
-          {showAddTxForm && (
-            <form
-              onSubmit={handleAddTransaction}
-              style={{
-                backgroundColor: tokens.bgCard,
-                borderColor: editingTxId ? tokens.borderAccent : tokens.borderDefault,
-              }}
-              className="p-4 rounded-2xl border space-y-3 animate-in fade-in duration-150"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold">
-                  {editingTxId ? 'Update Transaction (Auto-Syncs Account Balance)' : 'Record Income or Expense'}
-                </h3>
-                <button
-                  type="button"
-                  onClick={resetTransactionForm}
-                  className="text-[11px]"
-                  style={{ color: tokens.textSecondary }}
-                >
-                  Cancel
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                {(['expense', 'income'] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      setTxType(t);
-                      if (txCategory !== 'Loan' && txCategory !== 'Transfer') {
-                        setTxCategory(t === 'income' ? 'Salary' : 'Dining');
-                      }
-                    }}
-                    style={{
-                      backgroundColor: txType === t ? tokens.accentPrimary : tokens.bgSurface,
-                      color: txType === t ? tokens.accentContrast : tokens.textSecondary,
-                      borderColor: txType === t ? 'transparent' : tokens.borderDefault,
-                    }}
-                    className="py-2 rounded-xl border text-xs font-bold capitalize transition"
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={txTitle}
-                  onChange={(e) => setTxTitle(e.target.value)}
-                  placeholder="e.g. Monthly Salary, Supermarket, EthioTelecom Fiber..."
-                  style={{
-                    backgroundColor: tokens.bgInput,
-                    borderColor: tokens.borderDefault,
-                    color: tokens.textPrimary,
-                  }}
-                  className="w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
-                />
-              </div>
-
+          {/* =================================================================
+              LEDGER 1 VIEW: MAIN BALANCE LEDGER (ACCOUNTS & CASHFLOW)
+             ================================================================= */}
+          {activeLedgerView === 'main' && (
+            <div className="space-y-3">
+              {/* Main Balance Ledger KPI Summary Strip */}
               <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={txAmount}
-                    onChange={(e) => setTxAmount(e.target.value)}
-                    placeholder="0.00"
-                    style={{
-                      backgroundColor: tokens.bgInput,
-                      borderColor: tokens.borderDefault,
-                      color: tokens.textPrimary,
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border text-xs font-mono tabular-nums focus:outline-none"
-                  />
+                <div
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-3 rounded-2xl border"
+                >
+                  <div className="text-[10px] font-semibold" style={{ color: tokens.textSecondary }}>
+                    Main Account Balance
+                  </div>
+                  <div className="text-xs font-black tabular-nums mt-0.5 truncate">
+                    {formatMoney(portfolioSummary.totalAccountsBase, baseCurrency)}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                    Currency
-                  </label>
-                  <select
-                    value={txCurrency}
-                    onChange={(e) => setTxCurrency(e.target.value as CurrencyCode)}
-                    style={{
-                      backgroundColor: tokens.bgInput,
-                      borderColor: tokens.borderDefault,
-                      color: tokens.textPrimary,
-                    }}
-                    className="w-full px-2.5 py-2 rounded-xl border text-xs font-bold focus:outline-none"
-                  >
-                    {(Object.keys(CURRENCIES) as CurrencyCode[]).map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                <div
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-3 rounded-2xl border"
+                >
+                  <div className="text-[10px] font-semibold" style={{ color: tokens.textSecondary }}>
+                    Total Inflow
+                  </div>
+                  <div className="text-xs font-black text-emerald-400 tabular-nums mt-0.5 truncate">
+                    +{formatMoney(portfolioSummary.totalIncomeBase, baseCurrency)}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                    Category
-                  </label>
-                  <select
-                    value={txCategory}
-                    onChange={(e) => setTxCategory(e.target.value as FinTrackCategory)}
-                    style={{
-                      backgroundColor: tokens.bgInput,
-                      borderColor: tokens.borderDefault,
-                      color: tokens.textPrimary,
-                    }}
-                    className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
-                  >
-                    {txType === 'income' ? (
-                      <>
-                        <option value="Salary">Salary</option>
-                        <option value="Business">Business</option>
-                        <option value="Loan">Loan</option>
-                        <option value="Transfer">Transfer</option>
-                        <option value="Income">Other Income</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="Dining">Dining</option>
-                        <option value="Housing">Housing</option>
-                        <option value="Transit">Transit</option>
-                        <option value="Utilities">Utilities</option>
-                        <option value="Subscriptions">Subscriptions</option>
-                        <option value="Shopping">Shopping</option>
-                        <option value="Loan">Loan</option>
-                        <option value="Transfer">Transfer</option>
-                      </>
-                    )}
-                  </select>
+                <div
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-3 rounded-2xl border"
+                >
+                  <div className="text-[10px] font-semibold" style={{ color: tokens.textSecondary }}>
+                    Total Outflow
+                  </div>
+                  <div className="text-xs font-black text-rose-400 tabular-nums mt-0.5 truncate">
+                    -{formatMoney(portfolioSummary.totalExpenseBase, baseCurrency)}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                    Linked Bank or Wallet Account
-                  </label>
-                  <select
-                    value={txAccountId || 'NONE'}
-                    onChange={(e) => setTxAccountId(e.target.value)}
-                    style={{
-                      backgroundColor: tokens.bgInput,
-                      borderColor: tokens.borderDefault,
-                      color: tokens.textPrimary,
-                    }}
-                    className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
-                  >
-                    <option value="NONE">— No linked account —</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({a.currency} {a.balance.toFixed(2)})
-                      </option>
-                    ))}
-                  </select>
+              <div className="flex items-center justify-between gap-2">
+                {/* Category Filter Buttons (Excludes Loan since Loans have their own Ledger) */}
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {(
+                    [
+                      'ALL',
+                      'Transfer',
+                      'Salary',
+                      'Business',
+                      'Income',
+                      'Housing',
+                      'Dining',
+                      'Transit',
+                      'Utilities',
+                      'Subscriptions',
+                      'Shopping',
+                    ] as const
+                  ).map((cat) => {
+                    const active = selectedCategoryFilter === cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategoryFilter(cat);
+                          sdk.ui.hapticFeedback('light');
+                        }}
+                        style={{
+                          backgroundColor: active ? tokens.accentPrimary : tokens.bgSurface,
+                          color: active ? tokens.accentContrast : tokens.textSecondary,
+                          borderColor: active ? 'transparent' : tokens.borderDefault,
+                        }}
+                        className="px-3 py-1.5 rounded-xl border text-[11px] font-semibold whitespace-nowrap shrink-0 transition"
+                      >
+                        {cat === 'ALL' ? 'All Main Activity' : cat}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1" style={{ color: tokens.textSecondary }}>
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={txDate}
-                    onChange={(e) => setTxDate(e.target.value)}
-                    style={{
-                      backgroundColor: tokens.bgInput,
-                      borderColor: tokens.borderDefault,
-                      color: tokens.textPrimary,
-                    }}
-                    className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <label
-                style={{
-                  backgroundColor: tokens.bgSurface,
-                  borderColor: tokens.borderDefault,
-                }}
-                className="p-3 rounded-xl border flex items-center justify-between cursor-pointer"
-              >
-                <div className="space-y-0.5">
-                  <div className="text-xs font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>
-                      {txType === 'expense'
-                        ? 'Deduct from Shared SuperApp Wallet'
-                        : 'Credit to Shared SuperApp Wallet'}
-                    </span>
-                  </div>
-                  <div className="text-[10px]" style={{ color: tokens.textSecondary }}>
-                    Host SuperApp Wallet Balance: ${sdk.payment.getBalance().toFixed(2)}
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={chargeSuperAppWallet}
-                  onChange={(e) => setChargeSuperAppWallet(e.target.checked)}
-                  className="h-4 w-4 accent-teal-500"
-                />
-              </label>
-
-              <button
-                type="submit"
-                style={{
-                  backgroundColor: tokens.accentPrimary,
-                  color: tokens.accentContrast,
-                }}
-                className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
-              >
-                {editingTxId ? 'Update Transaction & Sync Balance' : 'Save Transaction'}
-              </button>
-            </form>
-          )}
-
-          {/* Entries List */}
-          <div className="space-y-2">
-            {filteredEntries.length === 0 ? (
-              <div
-                style={{
-                  backgroundColor: tokens.bgCard,
-                  borderColor: tokens.borderDefault,
-                }}
-                className="p-6 rounded-2xl border text-center space-y-2"
-              >
-                <TrendingUp className="w-6 h-6 mx-auto opacity-50" />
-                <p className="text-xs font-bold">No Transactions Recorded Yet</p>
-                <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
-                  Tap Record to log multi-currency income or expenses linked to your bank or wallet accounts.
-                </p>
                 <button
                   type="button"
-                  onClick={() => setShowAddTxForm(true)}
+                  onClick={() => {
+                    if (showAddTxForm && !editingTxId) {
+                      resetTransactionForm();
+                    } else {
+                      setEditingTxId(null);
+                      setTxTitle('');
+                      setTxAmount('');
+                      setTxDate(new Date().toISOString().slice(0, 10));
+                      if ((!txAccountId || txAccountId === 'NONE') && accounts[0]) {
+                        setTxAccountId(accounts[0].id);
+                      }
+                      setShowAddTxForm(true);
+                    }
+                  }}
                   style={{
                     backgroundColor: tokens.accentPrimary,
                     color: tokens.accentContrast,
                   }}
-                  className="px-4 py-1.5 rounded-xl text-xs font-bold transition ios-active mt-1"
+                  className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition"
                 >
-                  + Record First Transaction
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Record</span>
                 </button>
               </div>
-            ) : (
-              filteredEntries.map((entry) => (
-                <div
-                  key={entry.id}
+
+              {showAddTxForm && (
+                <form
+                  onSubmit={handleAddTransaction}
                   style={{
                     backgroundColor: tokens.bgCard,
-                    borderColor: editingTxId === entry.id ? tokens.borderAccent : tokens.borderDefault,
+                    borderColor: editingTxId ? tokens.borderAccent : tokens.borderDefault,
                   }}
-                  className="p-3.5 rounded-2xl border flex items-center justify-between gap-3"
+                  className="p-4 rounded-2xl border space-y-3 animate-in fade-in duration-150"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
-                      style={{ backgroundColor: CATEGORY_COLORS[entry.category] || '#6366f1' }}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold">
+                      {editingTxId
+                        ? 'Update Main Ledger Entry (Auto-Syncs Account Balance)'
+                        : 'Record Main Balance Income or Expense'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={resetTransactionForm}
+                      className="text-[11px]"
+                      style={{ color: tokens.textSecondary }}
                     >
-                      {entry.type === 'income' ? (
-                        <TrendingUp className="w-4 h-4" />
-                      ) : (
-                        <TrendingDown className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold truncate">{entry.title}</div>
-                      <div
-                        className="text-[10px] mt-0.5 truncate"
-                        style={{ color: tokens.textMuted }}
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['expense', 'income'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => {
+                          setTxType(t);
+                          if (txCategory !== 'Transfer') {
+                            setTxCategory(t === 'income' ? 'Salary' : 'Dining');
+                          }
+                        }}
+                        style={{
+                          backgroundColor: txType === t ? tokens.accentPrimary : tokens.bgSurface,
+                          color: txType === t ? tokens.accentContrast : tokens.textSecondary,
+                          borderColor: txType === t ? 'transparent' : tokens.borderDefault,
+                        }}
+                        className="py-2 rounded-xl border text-xs font-bold capitalize transition"
                       >
-                        {entry.category} · {entry.date}
-                        {entry.accountName ? ` · ${entry.accountName}` : ''}
-                        {entry.settledViaWallet ? ' · SuperApp Wallet' : ''}
-                      </div>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label
+                      className="text-[11px] font-semibold block mb-1"
+                      style={{ color: tokens.textSecondary }}
+                    >
+                      Description
+                    </label>
+                    <input
+                      type="text"
+                      value={txTitle}
+                      onChange={(e) => setTxTitle(e.target.value)}
+                      placeholder="e.g. Monthly Salary, Supermarket, EthioTelecom Fiber..."
+                      style={{
+                        backgroundColor: tokens.bgInput,
+                        borderColor: tokens.borderDefault,
+                        color: tokens.textPrimary,
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Amount
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={txAmount}
+                        onChange={(e) => setTxAmount(e.target.value)}
+                        placeholder="0.00"
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border text-xs font-mono tabular-nums focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Currency
+                      </label>
+                      <select
+                        value={txCurrency}
+                        onChange={(e) => setTxCurrency(e.target.value as CurrencyCode)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl border text-xs font-bold focus:outline-none"
+                      >
+                        {(Object.keys(CURRENCIES) as CurrencyCode[]).map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Category
+                      </label>
+                      <select
+                        value={txCategory}
+                        onChange={(e) => setTxCategory(e.target.value as FinTrackCategory)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                      >
+                        {txType === 'income' ? (
+                          <>
+                            <option value="Salary">Salary</option>
+                            <option value="Business">Business</option>
+                            <option value="Transfer">Transfer</option>
+                            <option value="Income">Other Income</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="Dining">Dining</option>
+                            <option value="Housing">Housing</option>
+                            <option value="Transit">Transit</option>
+                            <option value="Utilities">Utilities</option>
+                            <option value="Subscriptions">Subscriptions</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Transfer">Transfer</option>
+                          </>
+                        )}
+                      </select>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="text-right mr-1">
-                      <div
-                        className={`text-xs font-extrabold tabular-nums ${
-                          entry.type === 'income' ? 'text-emerald-400' : ''
-                        }`}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
                       >
-                        {entry.type === 'income' ? '+' : '-'}
-                        {formatMoney(entry.amount, entry.currency)}
-                      </div>
-                      {entry.currency !== baseCurrency && (
-                        <div
-                          className="text-[10px] font-mono tabular-nums"
-                          style={{ color: tokens.textMuted }}
-                        >
-                          ≈ {formatMoney(convertAmount(entry.amount, entry.currency, baseCurrency), baseCurrency)}
-                        </div>
-                      )}
+                        Linked Bank or Wallet Account
+                      </label>
+                      <select
+                        value={txAccountId || 'NONE'}
+                        onChange={(e) => setTxAccountId(e.target.value)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                      >
+                        <option value="NONE">— No linked account —</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.currency} {a.balance.toFixed(2)})
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={txDate}
+                        onChange={(e) => setTxDate(e.target.value)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <label
+                    style={{
+                      backgroundColor: tokens.bgSurface,
+                      borderColor: tokens.borderDefault,
+                    }}
+                    className="p-3 rounded-xl border flex items-center justify-between cursor-pointer"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>
+                          {txType === 'expense'
+                            ? 'Deduct from Shared SuperApp Wallet'
+                            : 'Credit to Shared SuperApp Wallet'}
+                        </span>
+                      </div>
+                      <div className="text-[10px]" style={{ color: tokens.textSecondary }}>
+                        Host SuperApp Wallet Balance: ${sdk.payment.getBalance().toFixed(2)}
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={chargeSuperAppWallet}
+                      onChange={(e) => setChargeSuperAppWallet(e.target.checked)}
+                      className="h-4 w-4 accent-teal-500"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    style={{
+                      backgroundColor: tokens.accentPrimary,
+                      color: tokens.accentContrast,
+                    }}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
+                  >
+                    {editingTxId ? 'Update Main Ledger & Sync Account' : 'Save to Main Balance Ledger'}
+                  </button>
+                </form>
+              )}
+
+              {/* Main Balance Ledger Entries List */}
+              <div className="space-y-2">
+                {filteredEntries.length === 0 ? (
+                  <div
+                    style={{
+                      backgroundColor: tokens.bgCard,
+                      borderColor: tokens.borderDefault,
+                    }}
+                    className="p-6 rounded-2xl border text-center space-y-2"
+                  >
+                    <TrendingUp className="w-6 h-6 mx-auto opacity-50" />
+                    <p className="text-xs font-bold">No Main Balance Transactions Yet</p>
+                    <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
+                      Record income, expenses, or transfers linked to your Bank & Wallet accounts. Loan activity is tracked separately in the Loan Balance Ledger.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => startEditTransaction(entry)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
-                      aria-label={`Edit transaction ${entry.title}`}
-                      title="Edit transaction"
+                      onClick={() => setShowAddTxForm(true)}
+                      style={{
+                        backgroundColor: tokens.accentPrimary,
+                        color: tokens.accentContrast,
+                      }}
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold transition ios-active mt-1"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteEntry(entry.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
-                      aria-label={`Delete transaction ${entry.title}`}
-                      title="Delete transaction"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      + Record Main Transaction
                     </button>
                   </div>
+                ) : (
+                  filteredEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        backgroundColor: tokens.bgCard,
+                        borderColor:
+                          editingTxId === entry.id ? tokens.borderAccent : tokens.borderDefault,
+                      }}
+                      className="p-3.5 rounded-2xl border flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
+                          style={{ backgroundColor: CATEGORY_COLORS[entry.category] || '#6366f1' }}
+                        >
+                          {entry.type === 'income' ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold truncate">{entry.title}</div>
+                          <div
+                            className="text-[10px] mt-0.5 truncate"
+                            style={{ color: tokens.textMuted }}
+                          >
+                            {entry.category} · {entry.date}
+                            {entry.accountName ? ` · ${entry.accountName}` : ''}
+                            {entry.settledViaWallet ? ' · SuperApp Wallet' : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="text-right mr-1">
+                          <div
+                            className={`text-xs font-extrabold tabular-nums ${
+                              entry.type === 'income' ? 'text-emerald-400' : ''
+                            }`}
+                          >
+                            {entry.type === 'income' ? '+' : '-'}
+                            {formatMoney(entry.amount, entry.currency)}
+                          </div>
+                          {entry.currency !== baseCurrency && (
+                            <div
+                              className="text-[10px] font-mono tabular-nums"
+                              style={{ color: tokens.textMuted }}
+                            >
+                              ≈{' '}
+                              {formatMoney(
+                                convertAmount(entry.amount, entry.currency, baseCurrency),
+                                baseCurrency
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => startEditTransaction(entry)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                          aria-label={`Edit transaction ${entry.title}`}
+                          title="Edit transaction"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEntry(entry.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                          aria-label={`Delete transaction ${entry.title}`}
+                          title="Delete transaction"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================
+              LEDGER 2 VIEW: LOAN BALANCE LEDGER (BORROWED & LENT OBLIGATIONS)
+             ================================================================= */}
+          {activeLedgerView === 'loan' && (
+            <div className="space-y-3">
+              {/* Loan Balance Ledger KPI Summary Strip */}
+              <div className="grid grid-cols-2 gap-2">
+                <div
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-3 rounded-2xl border"
+                >
+                  <div className="text-[10px] font-semibold" style={{ color: tokens.textSecondary }}>
+                    Borrowed Debt Balance (Payable)
+                  </div>
+                  <div className="text-sm font-black text-rose-400 tabular-nums mt-0.5 truncate">
+                    {formatMoney(portfolioSummary.activeBorrowedBase, baseCurrency)}
+                  </div>
+                  <div className="text-[10px] mt-0.5" style={{ color: tokens.textMuted }}>
+                    B2C & P2P Liabilities
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
+
+                <div
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: tokens.borderDefault,
+                  }}
+                  className="p-3 rounded-2xl border"
+                >
+                  <div className="text-[10px] font-semibold" style={{ color: tokens.textSecondary }}>
+                    Lent Loan Balance (Receivable)
+                  </div>
+                  <div className="text-sm font-black text-emerald-400 tabular-nums mt-0.5 truncate">
+                    {formatMoney(portfolioSummary.activeLentBase, baseCurrency)}
+                  </div>
+                  <div className="text-[10px] mt-0.5" style={{ color: tokens.textMuted }}>
+                    P2P & Equb Receivables
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                {/* Loan Balance Ledger Filter Buttons */}
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {(
+                    [
+                      { id: 'ALL', label: 'All Loan Entries' },
+                      { id: 'borrowed', label: 'Borrowed' },
+                      { id: 'lent', label: 'Lent (P2P)' },
+                      { id: 'principal', label: 'Disbursements (+)' },
+                      { id: 'repayment', label: 'Repayments (-)' },
+                    ] as const
+                  ).map((f) => {
+                    const active = loanLedgerFilter === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          setLoanLedgerFilter(f.id);
+                          sdk.ui.hapticFeedback('light');
+                        }}
+                        style={{
+                          backgroundColor: active ? tokens.accentPrimary : tokens.bgSurface,
+                          color: active ? tokens.accentContrast : tokens.textSecondary,
+                          borderColor: active ? 'transparent' : tokens.borderDefault,
+                        }}
+                        className="px-3 py-1.5 rounded-xl border text-[11px] font-semibold whitespace-nowrap shrink-0 transition"
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showAddLoanLedgerForm && !editingLoanLedgerId) {
+                      resetLoanLedgerForm();
+                    } else if (loans.length === 0) {
+                      setActiveTab('loans');
+                      setShowAddLoanForm(true);
+                      sdk.ui.showToast('Create a loan to start tracking in the Loan Balance Ledger', 'info');
+                    } else {
+                      setEditingLoanLedgerId(null);
+                      setLlTargetLoanId(loans[0].id);
+                      setLlTitle('');
+                      setLlAmount('');
+                      setLlDate(new Date().toISOString().slice(0, 10));
+                      if ((!llAccountId || llAccountId === 'NONE') && accounts[0]) {
+                        setLlAccountId(accounts[0].id);
+                      }
+                      setShowAddLoanLedgerForm(true);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: tokens.accentPrimary,
+                    color: tokens.accentContrast,
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{loans.length === 0 ? 'New Loan' : 'Log Repayment'}</span>
+                </button>
+              </div>
+
+              {showAddLoanLedgerForm && (
+                <form
+                  onSubmit={handleSaveLoanLedgerEntry}
+                  style={{
+                    backgroundColor: tokens.bgCard,
+                    borderColor: editingLoanLedgerId ? tokens.borderAccent : tokens.borderDefault,
+                  }}
+                  className="p-4 rounded-2xl border space-y-3 animate-in fade-in duration-150"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold">
+                      {editingLoanLedgerId
+                        ? 'Update Loan Balance Ledger Entry (Auto-Syncs Loan & Account)'
+                        : 'Record Loan Repayment / Collection in Loan Ledger'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={resetLoanLedgerForm}
+                      className="text-[11px]"
+                      style={{ color: tokens.textSecondary }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {!editingLoanLedgerId && (
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Select Active Loan
+                      </label>
+                      <select
+                        value={llTargetLoanId || loans[0]?.id || ''}
+                        onChange={(e) => setLlTargetLoanId(e.target.value)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border text-xs font-bold focus:outline-none"
+                      >
+                        {loans.map((l) => {
+                          const rem = Math.max(0, l.totalPayable - l.paidAmount);
+                          return (
+                            <option key={l.id} value={l.id}>
+                              {l.title} ({l.providerName}) — Balance: {l.currency} {rem.toFixed(2)}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label
+                      className="text-[11px] font-semibold block mb-1"
+                      style={{ color: tokens.textSecondary }}
+                    >
+                      Entry Description
+                    </label>
+                    <input
+                      type="text"
+                      value={llTitle}
+                      onChange={(e) => setLlTitle(e.target.value)}
+                      placeholder="Optional custom note (auto-generated if left blank)"
+                      style={{
+                        backgroundColor: tokens.bgInput,
+                        borderColor: tokens.borderDefault,
+                        color: tokens.textPrimary,
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border text-xs focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Amount
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={llAmount}
+                        onChange={(e) => setLlAmount(e.target.value)}
+                        placeholder="0.00"
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border text-xs font-mono tabular-nums focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Settlement Account
+                      </label>
+                      <select
+                        value={llAccountId || 'NONE'}
+                        onChange={(e) => setLlAccountId(e.target.value)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                      >
+                        <option value="NONE">— No account impact —</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.currency} {a.balance.toFixed(2)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        className="text-[11px] font-semibold block mb-1"
+                        style={{ color: tokens.textSecondary }}
+                      >
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={llDate}
+                        onChange={(e) => setLlDate(e.target.value)}
+                        style={{
+                          backgroundColor: tokens.bgInput,
+                          borderColor: tokens.borderDefault,
+                          color: tokens.textPrimary,
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl border text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    style={{
+                      backgroundColor: tokens.accentPrimary,
+                      color: tokens.accentContrast,
+                    }}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold transition ios-active"
+                  >
+                    {editingLoanLedgerId
+                      ? 'Update Loan Ledger Entry & Sync Balances'
+                      : 'Save to Loan Balance Ledger'}
+                  </button>
+                </form>
+              )}
+
+              {/* Loan Balance Ledger Entries List */}
+              <div className="space-y-2">
+                {filteredLoanLedgerEntries.length === 0 ? (
+                  <div
+                    style={{
+                      backgroundColor: tokens.bgCard,
+                      borderColor: tokens.borderDefault,
+                    }}
+                    className="p-6 rounded-2xl border text-center space-y-2"
+                  >
+                    <Briefcase className="w-6 h-6 mx-auto opacity-50" />
+                    <p className="text-xs font-bold">No Loan Balance Ledger Entries Yet</p>
+                    <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
+                      Every B2C or P2P loan disbursement (+obligation) and repayment (-settlement) is automatically tracked here.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('loans');
+                        setShowAddLoanForm(true);
+                      }}
+                      style={{
+                        backgroundColor: tokens.accentPrimary,
+                        color: tokens.accentContrast,
+                      }}
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold transition ios-active mt-1"
+                    >
+                      + Create or Manage Loans
+                    </button>
+                  </div>
+                ) : (
+                  filteredLoanLedgerEntries.map((entry) => {
+                    const parentLoan = loans.find((l) => l.id === entry.loanId);
+                    const remainingLoanBal = parentLoan
+                      ? Math.max(0, parentLoan.totalPayable - parentLoan.paidAmount)
+                      : 0;
+                    const isPrincipal = entry.entryKind === 'principal';
+
+                    return (
+                      <div
+                        key={entry.id}
+                        style={{
+                          backgroundColor: tokens.bgCard,
+                          borderColor:
+                            editingLoanLedgerId === entry.id
+                              ? tokens.borderAccent
+                              : tokens.borderDefault,
+                        }}
+                        className="p-3.5 rounded-2xl border flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
+                            style={{
+                              backgroundColor: isPrincipal ? '#f43f5e' : '#10b981',
+                            }}
+                          >
+                            {isPrincipal ? (
+                              <ArrowUpRight className="w-4 h-4" />
+                            ) : (
+                              <ArrowDownRight className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold truncate">{entry.title}</span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                  entry.direction === 'borrowed'
+                                    ? 'bg-rose-500/15 text-rose-400'
+                                    : 'bg-emerald-500/15 text-emerald-400'
+                                }`}
+                              >
+                                {entry.providerType} · {entry.direction}
+                              </span>
+                            </div>
+                            <div
+                              className="text-[10px] mt-0.5 truncate"
+                              style={{ color: tokens.textMuted }}
+                            >
+                              {isPrincipal ? 'Loan Balance Added' : 'Loan Balance Reduced'} ·{' '}
+                              {entry.date}
+                              {entry.accountName ? ` · Account: ${entry.accountName}` : ''}
+                              {parentLoan
+                                ? ` · Remaining Loan Bal: ${formatMoney(
+                                    remainingLoanBal,
+                                    parentLoan.currency
+                                  )}`
+                                : ''}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="text-right mr-1">
+                            <div
+                              className={`text-xs font-extrabold tabular-nums ${
+                                isPrincipal ? 'text-rose-400' : 'text-emerald-400'
+                              }`}
+                            >
+                              {isPrincipal ? '+' : '-'}
+                              {formatMoney(entry.amount, entry.currency)}
+                            </div>
+                            <div
+                              className="text-[9px] font-semibold"
+                              style={{ color: tokens.textMuted }}
+                            >
+                              {isPrincipal ? 'Loan Obligation' : 'Paid / Settled'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => startEditLoanLedgerEntry(entry)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                            aria-label={`Edit loan ledger entry ${entry.title}`}
+                            title="Edit loan ledger entry"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLoanLedgerEntry(entry.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                            aria-label={`Delete loan ledger entry ${entry.title}`}
+                            title="Delete loan ledger entry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3309,8 +4174,8 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
             </div>
           </div>
 
-          {/* Sub-Navigation: Loans vs Providers + B2C/P2P Filter */}
-          <div className="flex items-center justify-between gap-2">
+          {/* Sub-Navigation: Loans vs Providers + Loan Balance Ledger Jump + B2C/P2P Filter */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div
               className="flex items-center gap-1 p-1 rounded-xl border"
               style={{
@@ -3340,6 +4205,21 @@ export const FinTrackApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) => {
                 className="px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition"
               >
                 Providers ({loanProviders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveLedgerView('loan');
+                  setActiveTab('ledger');
+                  sdk.ui.hapticFeedback('light');
+                }}
+                style={{
+                  color: tokens.accentPrimary,
+                }}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition flex items-center gap-1"
+              >
+                <TrendingUp className="w-3 h-3" />
+                <span>Loan Ledger ({loanLedgerEntries.length})</span>
               </button>
             </div>
 

@@ -33,6 +33,7 @@ import {
   KeyRound,
   Terminal,
   Layers,
+  Trash2,
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -49,6 +50,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
     getPluggableSetting,
     availableApps,
     installedAppIds,
+    uninstallApp,
     requestConfirm,
     showToast,
     hapticFeedback,
@@ -866,6 +868,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
 
                       return null;
                     })}
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        hapticFeedback('medium');
+                        const confirmed = await requestConfirm(
+                          `Uninstall "${app.name}"?`,
+                          `Remove "${app.name}" from your Super App Home Screen? You can reinstall it anytime from the App Store.`
+                        );
+                        if (confirmed) {
+                          uninstallApp(app.id);
+                          setExpandedAppId(null);
+                        }
+                      }}
+                      className="w-full py-2.5 px-3 rounded-2xl border border-rose-500/35 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5 transition ios-active"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Uninstall {app.shortName}</span>
+                    </button>
                   </div>
                 )}
               </div>
