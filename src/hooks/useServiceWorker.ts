@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { MiniAppManifest } from '../types/miniapp';
 import { INITIAL_MINI_APPS } from '../data/seedMiniApps';
 import { offlineSyncService, OfflineMutationInput } from '../services/offlineSyncService';
-import { isStaticHostEnvironment } from '../lib/firebase';
+import { isStaticHostEnvironment, getResolvedApiPath } from '../lib/firebase';
 
 export interface BackgroundSyncResult {
   syncedCount: number;
@@ -320,7 +320,9 @@ export function useServiceWorker() {
           totalEntries += keys.length;
 
           if (name === 'omnimini-api-cache') {
-            const cachedApiResponse = await cache.match('/api/miniapps');
+            const apiCacheKey = getResolvedApiPath('api/miniapps');
+            const cachedApiResponse =
+              (await cache.match(apiCacheKey)) || (await cache.match('/api/miniapps'));
             if (cachedApiResponse) {
               try {
                 const data = await cachedApiResponse.clone().json();
@@ -491,24 +493,25 @@ export function useServiceWorker() {
       // Warm API cache or seed with local mini-apps manifest snapshot for offline access
       try {
         const apiCache = await window.caches.open('omnimini-api-cache');
+        const apiCacheKey = getResolvedApiPath('api/miniapps');
         if (isStaticHostEnvironment()) {
           const fallbackApps = loadLocalCachedMiniApps();
           const syntheticResponse = new Response(JSON.stringify(fallbackApps), {
             headers: { 'Content-Type': 'application/json' },
           });
-          await apiCache.put('/api/miniapps', syntheticResponse);
+          await apiCache.put(apiCacheKey, syntheticResponse);
         } else {
           try {
-            const apiRes = await fetch('/api/miniapps');
+            const apiRes = await fetch(apiCacheKey);
             if (apiRes.ok) {
-              await apiCache.put('/api/miniapps', apiRes.clone());
+              await apiCache.put(apiCacheKey, apiRes.clone());
             }
           } catch {
             const fallbackApps = loadLocalCachedMiniApps();
             const syntheticResponse = new Response(JSON.stringify(fallbackApps), {
               headers: { 'Content-Type': 'application/json' },
             });
-            await apiCache.put('/api/miniapps', syntheticResponse);
+            await apiCache.put(apiCacheKey, syntheticResponse);
           }
         }
       } catch {

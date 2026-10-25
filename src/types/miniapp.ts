@@ -74,6 +74,9 @@ export interface SuperAppUser {
   id: string;
   name: string;
   email: string;
+  username?: string;
+  phoneNumber?: string;
+  authProvider?: 'google' | 'password' | 'phone';
   avatar: string;
   isGoogle: boolean;
   walletBalance: number;

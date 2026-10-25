@@ -168,14 +168,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
             </div>
           )}
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <h3
                 className="text-sm font-bold truncate"
                 style={{ color: themeTokens.textPrimary }}
               >
                 {user?.name || 'Not Signed In'}
               </h3>
-              {user?.isGoogle && (
+              {user && (
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded-md font-mono border"
                   style={{
@@ -184,7 +184,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
                     borderColor: themeTokens.borderAccent,
                   }}
                 >
-                  Google SSO
+                  {user.authProvider === 'phone'
+                    ? 'Phone OTP'
+                    : user.authProvider === 'password'
+                    ? `@${user.username || 'Password'}`
+                    : 'Google SSO'}
                 </span>
               )}
             </div>
@@ -192,7 +196,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenAuth }) => {
               className="text-xs truncate mt-0.5"
               style={{ color: themeTokens.textSecondary }}
             >
-              {user?.email || 'Tap to sign in'}
+              {user?.phoneNumber || user?.email || 'Tap to sign in with Username, Phone, or Google'}
             </p>
           </div>
         </div>

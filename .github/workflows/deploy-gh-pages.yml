@@ -37,13 +37,13 @@ jobs:
       - name: Generate Multi-Resolution Icons (Zero Dependencies)
         run: node ./scripts/generate-icons.js
 
-      - name: Install & Rebuild Bundle (or use pre-compiled dist fallback)
+      - name: Install, Build & Verify GitHub Pages Bundle
         env:
           GITHUB_PAGES_BASE: './'
         run: |
           if npm install --legacy-peer-deps; then
             npm run lint || true
-            npm run build:gh-pages
+            npm run deploy:gh-pages
           else
             echo "Using pre-built production bundle in ./dist"
             node ./scripts/prepare-gh-pages.mjs

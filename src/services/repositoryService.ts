@@ -1,7 +1,7 @@
 import { INITIAL_MINI_APPS, INITIAL_REVIEWS } from '../data/seedMiniApps';
 import { MiniAppManifest, MiniAppReview, SuperAppUser } from '../types/miniapp';
 import { firestoreService } from './firestoreService';
-import { auth, isStaticHostEnvironment } from '../lib/firebase';
+import { auth, isStaticHostEnvironment, getResolvedApiPath, safeApiFetch } from '../lib/firebase';
 
 const STORAGE_KEY_APPS = 'omnimini_apps_repo_v3';
 const STORAGE_KEY_REVIEWS = 'omnimini_reviews_repo_v3';
@@ -69,7 +69,11 @@ export const repositoryService = {
         if (category && category !== 'all') params.append('category', category);
         if (search) params.append('search', search);
 
-        const res = await fetch(`/api/miniapps?${params.toString()}`);
+        const queryStr = params.toString();
+        const apiUrl = getResolvedApiPath(
+          queryStr ? `api/miniapps?${queryStr}` : 'api/miniapps'
+        );
+        const res = await safeApiFetch(apiUrl, undefined, isStaticHostEnvironment());
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data)) {
@@ -103,7 +107,11 @@ export const repositoryService = {
   async getMiniAppById(id: string): Promise<{ app: MiniAppManifest; reviews: MiniAppReview[] } | null> {
     if (!isStaticHostEnvironment()) {
       try {
-        const res = await fetch(`/api/miniapps/${id}`);
+        const res = await safeApiFetch(
+          getResolvedApiPath(`api/miniapps/${id}`),
+          undefined,
+          isStaticHostEnvironment()
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {
@@ -131,11 +139,15 @@ export const repositoryService = {
     let publishedManifest: MiniAppManifest | null = null;
     if (!isStaticHostEnvironment()) {
       try {
-        const res = await fetch('/api/miniapps/publish', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        const res = await safeApiFetch(
+          getResolvedApiPath('api/miniapps/publish'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          },
+          isStaticHostEnvironment()
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {
@@ -207,11 +219,15 @@ export const repositoryService = {
 
     if (!isStaticHostEnvironment()) {
       try {
-        const res = await fetch(`/api/miniapps/${id}/version`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ newVersion, releaseNotes, pluggableSettingsSchema: schema }),
-        });
+        const res = await safeApiFetch(
+          getResolvedApiPath(`api/miniapps/${id}/version`),
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newVersion, releaseNotes, pluggableSettingsSchema: schema }),
+          },
+          isStaticHostEnvironment()
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {
@@ -243,11 +259,15 @@ export const repositoryService = {
   async addReview(appId: string, userName: string, rating: number, comment: string): Promise<MiniAppReview> {
     if (!isStaticHostEnvironment()) {
       try {
-        const res = await fetch(`/api/miniapps/${appId}/reviews`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userName, rating, comment }),
-        });
+        const res = await safeApiFetch(
+          getResolvedApiPath(`api/miniapps/${appId}/reviews`),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userName, rating, comment }),
+          },
+          isStaticHostEnvironment()
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {
@@ -288,7 +308,11 @@ export const repositoryService = {
   async getTelemetry(): Promise<any> {
     if (!isStaticHostEnvironment()) {
       try {
-        const res = await fetch('/api/developer/analytics');
+        const res = await safeApiFetch(
+          getResolvedApiPath('api/developer/analytics'),
+          undefined,
+          isStaticHostEnvironment()
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.success) return json.data;
@@ -321,11 +345,15 @@ export const repositoryService = {
   async authenticateGoogle(googleData?: Partial<SuperAppUser>): Promise<SuperAppUser> {
     if (!isStaticHostEnvironment()) {
       try {
-        const res = await fetch('/api/auth/google', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(googleData || {}),
-        });
+        const res = await safeApiFetch(
+          getResolvedApiPath('api/auth/google'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(googleData || {}),
+          },
+          isStaticHostEnvironment()
+        );
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.user) return json.user;

@@ -32,6 +32,38 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
       (function() {
+        // 1. GitHub Pages Subpath Trailing-Slash & SPA 404 Route Restoration
+        // Ensures relative assets (./icon.svg, ./pwa-192x192.png, ./assets/*) always resolve
+        // against the repository root (/omni-mini-mfe/) instead of 404ing at the domain root.
+        try {
+          var l = window.location;
+          if (l.hostname.indexOf('.github.io') !== -1) {
+            var pathSegments = l.pathname.split('/').filter(Boolean);
+            // If visiting https://<user>.github.io/<repo> without a trailing slash, redirect to /<repo>/
+            if (pathSegments.length === 1 && l.pathname.slice(-1) !== '/') {
+              l.replace(
+                l.protocol + '//' + l.host + '/' + pathSegments[0] + '/' + l.search + l.hash
+              );
+              return;
+            }
+          }
+          // Restore deep SPA route redirected from 404.html (?p=/route)
+          if (l.search && l.search.indexOf('?p=/') === 0) {
+            var decoded = l.search
+              .slice(3)
+              .split('&')
+              .map(function(s) {
+                return s.replace(/~and~/g, '&');
+              });
+            var basePath = l.pathname.replace(/\/+$/, '');
+            window.history.replaceState(
+              null,
+              '',
+              basePath + decoded[0] + (decoded[1] ? '?' + decoded.slice(1).join('&') : '') + l.hash
+            );
+          }
+        } catch (e) {}
+
         var origConsoleError = console.error;
         console.error = function() {
           var args = Array.prototype.slice.call(arguments);

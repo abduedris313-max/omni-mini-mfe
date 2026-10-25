@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
 import {
   SuperAppUser,
   SuperAppSettings,
@@ -8,10 +8,11 @@ import {
 } from '../types/miniapp';
 import { repositoryService } from '../services/repositoryService';
 import { firestoreService } from '../services/firestoreService';
+import { authService, PhoneOtpDispatchResult } from '../services/authService';
 import { offlineSyncService } from '../services/offlineSyncService';
 import { runBackgroundIndexedDbSync, BackgroundSyncResult } from '../hooks/useServiceWorker';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { auth, googleProvider, browserPopupRedirectResolver } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import {
   resolveSuperAppTheme,
   superAppTokensToCSSVariables,
@@ -44,6 +45,18 @@ interface SuperAppContextValue {
   user: SuperAppUser | null;
   setUser: (user: SuperAppUser | null) => void;
   signInWithGoogle: (customData?: Partial<SuperAppUser>) => Promise<void>;
+  signInWithUsernamePassword: (identifier: string, password: string) => Promise<void>;
+  signUpWithUsernamePassword: (params: {
+    username: string;
+    email?: string;
+    password: string;
+    displayName?: string;
+  }) => Promise<void>;
+  sendPhoneOtp: (
+    phoneNumber: string,
+    recaptchaContainerId?: string
+  ) => Promise<PhoneOtpDispatchResult>;
+  verifyPhoneOtp: (e164Phone: string, code: string, displayName?: string) => Promise<void>;
   signOut: () => void;
 
   settings: SuperAppSettings;
@@ -207,17 +220,79 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const signInWithGoogle = async (_customData?: Partial<SuperAppUser>) => {
-    const credential = await signInWithPopup(auth, googleProvider);
-    const synced = await firestoreService.ensureUserProfile(
-      credential.user,
-      SUPER_APP_STARTER_CONFIG.preinstalledMiniAppIds
-    );
-    setUser(synced.user);
-    setWalletBalance(synced.walletBalance);
-    setInstalledAppIds(synced.installedAppIds);
-    setRecentAppIds(synced.recentAppIds);
-    showToast(`Welcome back, ${synced.user.name}! (Signed in via Google)`, 'success');
+  const applyAuthenticatedSession = (result: {
+    user: SuperAppUser;
+    walletBalance?: number;
+    installedAppIds?: string[];
+    recentAppIds?: string[];
+  }) => {
+    setUser(result.user);
+    if (typeof result.walletBalance === 'number') {
+      setWalletBalance(result.walletBalance);
+    }
+    if (result.installedAppIds && result.installedAppIds.length > 0) {
+      setInstalledAppIds(result.installedAppIds);
+    }
+    if (result.recentAppIds) {
+      setRecentAppIds(result.recentAppIds);
+    }
+  };
+
+  const signInWithGoogle = async (customData?: Partial<SuperAppUser>) => {
+    const result = await authService.signInWithGoogle(customData);
+    applyAuthenticatedSession(result);
+    showToast(`Welcome back, ${result.user.name}! (Signed in via Google)`, 'success');
+    hapticFeedback('success');
+  };
+
+  const signInWithUsernamePassword = async (identifier: string, password: string) => {
+    const result = await authService.signInWithUsernamePassword({
+      identifier,
+      password,
+    });
+    applyAuthenticatedSession(result);
+    showToast(`Welcome back, ${result.user.name}!`, 'success');
+    hapticFeedback('success');
+  };
+
+  const signUpWithUsernamePassword = async (params: {
+    username: string;
+    email?: string;
+    password: string;
+    displayName?: string;
+  }) => {
+    const identifier = params.email?.trim() ? params.email.trim() : params.username.trim();
+    const result = await authService.signUpWithUsernamePassword({
+      identifier,
+      password: params.password,
+      displayName: params.displayName || params.username,
+    });
+    applyAuthenticatedSession(result);
+    showToast(`Account @${result.user.username || params.username} created!`, 'success');
+    hapticFeedback('success');
+  };
+
+  const sendPhoneOtp = async (
+    phoneNumber: string,
+    recaptchaContainerId?: string
+  ): Promise<PhoneOtpDispatchResult> => {
+    const dispatch = await authService.sendPhoneOtp({
+      phoneNumber,
+      recaptchaContainerId,
+    });
+    showToast(`Verification code sent to ${dispatch.e164Phone}`, 'info');
+    hapticFeedback('medium');
+    return dispatch;
+  };
+
+  const verifyPhoneOtp = async (e164Phone: string, code: string, displayName?: string) => {
+    const result = await authService.verifyPhoneOtp({
+      e164Phone,
+      otpCode: code,
+      displayName,
+    });
+    applyAuthenticatedSession(result);
+    showToast(`Phone verified (${result.user.phoneNumber || result.user.name})!`, 'success');
     hapticFeedback('success');
   };
 
@@ -1260,6 +1335,10 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
         user,
         setUser,
         signInWithGoogle,
+        signInWithUsernamePassword,
+        signUpWithUsernamePassword,
+        sendPhoneOtp,
+        verifyPhoneOtp,
         signOut,
         settings,
         updateSetting,

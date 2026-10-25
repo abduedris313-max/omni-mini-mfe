@@ -14,7 +14,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
-import { db, auth, OperationType, handleFirestoreError } from '../lib/firebase';
+import { db, auth, OperationType, handleFirestoreError, isStaticHostEnvironment } from '../lib/firebase';
 import { MiniAppManifest, SuperAppUser } from '../types/miniapp';
 
 // Blueprint validation constants & regex guards synced with firebase-blueprint.json & firestore.rules
@@ -71,6 +71,54 @@ export const firestoreService = {
     recentAppIds: string[];
   }> {
     const uid = sanitizeId(firebaseUser.uid, 'usr');
+    const providerIds = (firebaseUser.providerData || []).map((p) => p.providerId);
+    const isPhoneUser = providerIds.includes('phone') || Boolean(firebaseUser.phoneNumber && !firebaseUser.email);
+    const isGoogleUser = providerIds.includes('google.com');
+    const authProvider: 'google' | 'password' | 'phone' = isPhoneUser
+      ? 'phone'
+      : isGoogleUser
+        ? 'google'
+        : 'password';
+
+    const rawName = (
+      firebaseUser.displayName ||
+      firebaseUser.email?.split('@')[0] ||
+      firebaseUser.phoneNumber ||
+      'Authenticated User'
+    ).trim();
+    const safeName = rawName.slice(0, MAX_NAME_LENGTH) || 'User';
+    const safeAvatar = (firebaseUser.photoURL || '').slice(0, MAX_AVATAR_LENGTH);
+    const safeEmail = (
+      firebaseUser.email ||
+      (firebaseUser.phoneNumber
+        ? `${firebaseUser.phoneNumber.replace(/[^0-9]/g, '')}@phone.omnimini.app`
+        : 'user@omnimini.app')
+    ).slice(0, MAX_EMAIL_LENGTH);
+    const safeInstalled = sanitizeBoundedStringList(defaultInstalledApps);
+
+    const fallbackProfile = {
+      user: {
+        id: uid,
+        name: safeName,
+        email: safeEmail,
+        phoneNumber: firebaseUser.phoneNumber || undefined,
+        username: firebaseUser.email ? firebaseUser.email.split('@')[0] : undefined,
+        authProvider,
+        avatar: safeAvatar,
+        isGoogle: isGoogleUser,
+        walletBalance: 0,
+        role: 'consumer' as const,
+        joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      },
+      walletBalance: 0,
+      installedAppIds: safeInstalled,
+      recentAppIds: [] as string[],
+    };
+
+    if (isStaticHostEnvironment() || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      return fallbackProfile;
+    }
+
     const userDocRef = doc(db, 'users', uid);
     const privateDocRef = doc(db, 'users', uid, 'private', 'info');
 
@@ -78,17 +126,15 @@ export const firestoreService = {
     try {
       userSnap = await getDoc(userDocRef);
     } catch (error) {
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (msg.includes('offline') || msg.includes('unavailable') || msg.includes('network')) {
+        return fallbackProfile;
+      }
       handleFirestoreError(error, OperationType.GET, `users/${uid}`);
     }
 
-    const rawName = (firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Authenticated User').trim();
-    const safeName = rawName.slice(0, MAX_NAME_LENGTH) || 'User';
-    const safeAvatar = (firebaseUser.photoURL || '').slice(0, MAX_AVATAR_LENGTH);
-    const safeEmail = (firebaseUser.email || 'user@omnimini.app').slice(0, MAX_EMAIL_LENGTH);
-    const safeInstalled = sanitizeBoundedStringList(defaultInstalledApps);
-
     if (!userSnap.exists()) {
-      // Only verified users can write according to security rules
+      // Only verified email users can write to cloud Firestore according to zero-trust security rules
       if (firebaseUser.emailVerified) {
         const batch = writeBatch(db);
         batch.set(userDocRef, {
@@ -112,25 +158,14 @@ export const firestoreService = {
         try {
           await batch.commit();
         } catch (error) {
-          handleFirestoreError(error, OperationType.CREATE, `users/${uid}`);
+          const msg = error instanceof Error ? error.message.toLowerCase() : '';
+          if (!msg.includes('offline') && !msg.includes('unavailable')) {
+            handleFirestoreError(error, OperationType.CREATE, `users/${uid}`);
+          }
         }
       }
 
-      return {
-        user: {
-          id: uid,
-          name: safeName,
-          email: safeEmail,
-          avatar: safeAvatar,
-          isGoogle: true,
-          walletBalance: 0,
-          role: 'consumer',
-          joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        },
-        walletBalance: 0,
-        installedAppIds: safeInstalled,
-        recentAppIds: [],
-      };
+      return fallbackProfile;
     }
 
     const data = userSnap.data();
@@ -141,7 +176,10 @@ export const firestoreService = {
         email = privSnap.data().email;
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.GET, `users/${uid}/private/info`);
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (!msg.includes('offline') && !msg.includes('unavailable')) {
+        handleFirestoreError(error, OperationType.GET, `users/${uid}/private/info`);
+      }
     }
 
     const walletBalance = typeof data.walletBalance === 'number' ? data.walletBalance : 0;
@@ -158,8 +196,11 @@ export const firestoreService = {
         id: uid,
         name: typeof data.name === 'string' ? data.name : safeName,
         email,
+        phoneNumber: firebaseUser.phoneNumber || undefined,
+        username: email.split('@')[0],
+        authProvider,
         avatar: typeof data.avatar === 'string' ? data.avatar : safeAvatar,
-        isGoogle: true,
+        isGoogle: isGoogleUser,
         walletBalance,
         role,
         joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),

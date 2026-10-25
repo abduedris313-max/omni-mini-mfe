@@ -148,7 +148,7 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
 
 ---
 
-## 4. Local Development & GitHub Pages Deployment
+## 4. Local Development, GitHub Pages Deployment & Firebase Auth Setup
 
 ```bash
 # 1. Install dependencies
@@ -161,11 +161,19 @@ npm run dev
 npm run lint
 npm run lint:rules
 npm run build
+
+# 4. Run full GitHub Pages build, redirect generation & asset verification
+npm run deploy:gh-pages
+
+# 5. (Optional) Build and push ./dist directly to origin/gh-pages branch
+npm run deploy:gh-pages -- --push
 ```
 
-### Enable GitHub Pages in Your Repository
-1. Push this repository to GitHub (`main` branch).
-2. Navigate to **Settings → Pages** in your GitHub repository and select **GitHub Actions** as the source.
-3. In the **Firebase Console → Authentication → Settings → Authorized domains**, ensure `<your-username>.github.io` is listed so Google Sign-In popups work on your live URL.
+### Enable GitHub Pages & Firebase Providers
+See **[GITHUB_PAGES_DEPLOYMENT.md](./GITHUB_PAGES_DEPLOYMENT.md)** for the complete architecture of:
+- **Subpath Trailing-Slash & SPA `404.html` Redirects** (`scripts/prepare-gh-pages.mjs` & `index.html`)
+- **Static Edge API Router** (`src/lib/staticApiRouter.ts` & `dist/api/*`) eliminating `/api/miniapps` 404 errors on static hosts
+- **Multi-Provider Firebase Auth** (Google, Username/Password, and Phone SMS OTP) with automatic `/__/auth/iframe` 403 Forbidden & OpenDNS Mixed-Content protection
+
 
 
