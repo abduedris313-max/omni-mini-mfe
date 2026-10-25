@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      (function() {
+        var l = window.location;
+        var pathSegmentsToKeep = l.hostname.indexOf('.github.io') !== -1 ? 1 : 0;
+        var segments = l.pathname.split('/').filter(Boolean);
+        if (segments.length > pathSegmentsToKeep) {
+          var basePrefix = '/' + segments.slice(0, pathSegmentsToKeep).join('/');
+          if (basePrefix !== '/') basePrefix += '/';
+          var subRoute = '/' + segments.slice(pathSegmentsToKeep).join('/');
+          var query = l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '';
+          l.replace(
+            l.protocol + '//' + l.host + basePrefix + '?p=' + subRoute + query + l.hash
+          );
+        }
+      })();
+    </script>
+    <script type="text/javascript">
+window.__OMNIMINI_VITE_RUNTIME__ = true;
+(function() {
+  var origConsoleError = console.error;
+  console.error = function() {
+    var args = Array.prototype.slice.call(arguments);
+    var str = args.join(' ');
+    if (str.indexOf('WebSocket') !== -1 || (str.indexOf('[vite]') !== -1 && (str.indexOf('websocket') !== -1 || str.indexOf('failed to connect') !== -1))) {
+      return;
+    }
+    origConsoleError.apply(console, arguments);
+  };
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (event.reason) {
+      var msg = String(event.reason.message || event.reason);
+      if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('vite') !== -1) {
+        event.preventDefault();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      }
+    }
+  });
+
+  var OrigWS = window.WebSocket;
+  if (!OrigWS) return;
+
+  window.WebSocket = function(url, protocols) {
+    var isVite = protocols === 'vite-hmr' || (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('@vite/client') !== -1));
+    if (isVite) {
+      var listeners = { open: [], message: [], close: [], error: [] };
+      var socket = {
+        url: String(url),
+        readyState: 1,
+        protocol: 'vite-hmr',
+        extensions: '',
+        bufferedAmount: 0,
+        binaryType: 'blob',
+        addEventListener: function(event, cb) {
+          if (listeners[event]) listeners[event].push(cb);
+          if (event === 'open') {
+            setTimeout(function() { try { cb(new Event('open')); } catch(e){} }, 0);
+          }
+        },
+        removeEventListener: function(event, cb) {
+          if (listeners[event]) {
+            listeners[event] = listeners[event].filter(function(fn) { return fn !== cb; });
+          }
+        },
+        dispatchEvent: function(e) {
+          var fns = listeners[e.type] || [];
+          fns.forEach(function(fn) { try { fn(e); } catch(err){} });
+          return true;
+        },
+        send: function() {},
+        close: function(code, reason) {
+          socket.readyState = 3;
+          var closeEvt = new CloseEvent('close', { wasClean: true, code: code || 1000, reason: reason || '' });
+          (listeners.close || []).forEach(function(fn) { try { fn(closeEvt); } catch(err){} });
+        },
+        onopen: null,
+        onclose: null,
+        onmessage: null,
+        onerror: null
+      };
+
+      setTimeout(function() {
+        if (typeof socket.onopen === 'function') {
+          try { socket.onopen(new Event('open')); } catch(e){}
+        }
+      }, 0);
+
+      return socket;
+    }
+    return new OrigWS(url, protocols);
+  };
+
+  window.WebSocket.prototype = OrigWS.prototype;
+  window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+  window.WebSocket.OPEN = OrigWS.OPEN;
+  window.WebSocket.CLOSING = OrigWS.CLOSING;
+  window.WebSocket.CLOSED = OrigWS.CLOSED;
+})();
+</script>
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>OmniMini: Micro Frontend Super App Platform</title>
+    <meta name="description" content="Mobile-first iOS-style Micro Frontend Super App platform with shared authentication, pluggable settings, dynamic mini app runtime, developer console, backend repository, and developer guide." />
+    <meta property="og:title" content="OmniMini: Micro Frontend Super App Platform" />
+    <meta property="og:description" content="Mobile-first iOS-style Micro Frontend Super App platform with shared authentication, pluggable settings, dynamic mini app runtime, developer console, backend repository, and developer guide." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./assets/pwa-512x512-CLIWsSMO.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="OmniMini" />
+    <link rel="icon" type="image/svg+xml" href="./assets/icon-DftOHzpq.svg" />
+    <link rel="icon" type="image/png" sizes="512x512" href="./assets/pwa-512x512-CLIWsSMO.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/pwa-192x192-D2OZhphy.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="./assets/icon-96x96-DET7izUG.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./assets/icon-48x48-CnP5ISSe.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32-IoUNoJw-.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon-16x16-CAnoC61U.png" />
+    <link rel="shortcut icon" href="./assets/favicon-DD9-j1Gu.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon-boH6QFRc.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="./assets/icon-167x167-CAlZ6_Nb.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="./assets/icon-152x152-N0fD3HUu.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="./assets/icon-120x120-DPS24iqI.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        // 1. GitHub Pages Subpath Trailing-Slash & SPA 404 Route Restoration
+        // Ensures relative assets (./icon.svg, ./pwa-192x192.png, ./assets/*) always resolve
+        // against the repository root (/omni-mini-mfe/) instead of 404ing at the domain root.
+        try {
+          var l = window.location;
+          if (l.hostname.indexOf('.github.io') !== -1) {
+            var pathSegments = l.pathname.split('/').filter(Boolean);
+            // If visiting https://<user>.github.io/<repo> without a trailing slash, redirect to /<repo>/
+            if (pathSegments.length === 1 && l.pathname.slice(-1) !== '/') {
+              l.replace(
+                l.protocol + '//' + l.host + '/' + pathSegments[0] + '/' + l.search + l.hash
+              );
+              return;
+            }
+          }
+          // Restore deep SPA route redirected from 404.html (?p=/route)
+          if (l.search && l.search.indexOf('?p=/') === 0) {
+            var decoded = l.search
+              .slice(3)
+              .split('&')
+              .map(function(s) {
+                return s.replace(/~and~/g, '&');
+              });
+            var basePath = l.pathname.replace(/\/+$/, '');
+            window.history.replaceState(
+              null,
+              '',
+              basePath + decoded[0] + (decoded[1] ? '?' + decoded.slice(1).join('&') : '') + l.hash
+            );
+          }
+        } catch (e) {}
+
+        var origConsoleError = console.error;
+        console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          var str = args.join(' ');
+          if (str.indexOf('WebSocket') !== -1 || (str.indexOf('[vite]') !== -1 && (str.indexOf('websocket') !== -1 || str.indexOf('failed to connect') !== -1))) {
+            return;
+          }
+          origConsoleError.apply(console, arguments);
+        };
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event.reason) {
+            var msg = String(event.reason.message || event.reason);
+            if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('vite') !== -1) {
+              event.preventDefault();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            }
+          }
+        });
+
+        var OrigWS = window.WebSocket;
+        if (!OrigWS) return;
+
+        window.WebSocket = function(url, protocols) {
+          var isVite = protocols === 'vite-hmr' || (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('@vite/client') !== -1));
+          if (isVite) {
+            var listeners = { open: [], message: [], close: [], error: [] };
+            var socket = {
+              url: String(url),
+              readyState: 1,
+              protocol: 'vite-hmr',
+              extensions: '',
+              bufferedAmount: 0,
+              binaryType: 'blob',
+              addEventListener: function(event, cb) {
+                if (listeners[event]) listeners[event].push(cb);
+                if (event === 'open') {
+                  setTimeout(function() { try { cb(new Event('open')); } catch(e){} }, 0);
+                }
+              },
+              removeEventListener: function(event, cb) {
+                if (listeners[event]) {
+                  listeners[event] = listeners[event].filter(function(fn) { return fn !== cb; });
+                }
+              },
+              dispatchEvent: function(e) {
+                var fns = listeners[e.type] || [];
+                fns.forEach(function(fn) { try { fn(e); } catch(err){} });
+                return true;
+              },
+              send: function() {},
+              close: function(code, reason) {
+                socket.readyState = 3;
+                var closeEvt = new CloseEvent('close', { wasClean: true, code: code || 1000, reason: reason || '' });
+                (listeners.close || []).forEach(function(fn) { try { fn(closeEvt); } catch(err){} });
+              },
+              onopen: null,
+              onclose: null,
+              onmessage: null,
+              onerror: null
+            };
+
+            setTimeout(function() {
+              if (typeof socket.onopen === 'function') {
+                try { socket.onopen(new Event('open')); } catch(e){}
+              }
+            }, 0);
+
+            return socket;
+          }
+          return new OrigWS(url, protocols);
+        };
+
+        window.WebSocket.prototype = OrigWS.prototype;
+        window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+        window.WebSocket.OPEN = OrigWS.OPEN;
+        window.WebSocket.CLOSING = OrigWS.CLOSING;
+        window.WebSocket.CLOSED = OrigWS.CLOSED;
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-BGUcNGTZ.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-wv7ACRok.css">
+  <link rel="manifest" href="./manifest.webmanifest"></head>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-blue-500/30 selection:text-blue-200">
+    <div id="root"></div>
+    <script>
+      // When served by Vite Dev Server or compiled via `vite build`, `window.__OMNIMINI_VITE_RUNTIME__` is true.
+      // When GitHub Pages serves directly from the raw repository root (`/`) instead of `dist/`,
+      // this loader mounts the pre-compiled production bundle from `./dist/assets/` without 404 errors.
+      if (!window.__OMNIMINI_VITE_RUNTIME__) {
+        var manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = './manifest.webmanifest';
+        document.head.appendChild(manifestLink);
+
+        var cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        cssLink.href = './dist/assets/omnimini-bundle.css';
+        document.head.appendChild(cssLink);
+
+        var bundleScript = document.createElement('script');
+        bundleScript.type = 'module';
+        bundleScript.src = './dist/assets/omnimini-bundle.js';
+        document.body.appendChild(bundleScript);
+      }
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "data": {
+    "totalPlatformInstalls": 115200,
+    "crashFreeSessionRate": 100,
+    "developerCount": 9,
+    "totalMiniApps": 9,
+    "categoryDistribution": {
+      "finance": 3,
+      "transport": 1,
+      "food": 1,
+      "health": 1,
+      "productivity": 1,
+      "utilities": 0,
+      "developer": 2
+    }
+  }
+}
