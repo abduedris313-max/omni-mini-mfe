@@ -9,7 +9,15 @@ function loadAppsFromStorage(): MiniAppManifest[] {
     const raw = localStorage.getItem(STORAGE_KEY_APPS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const map = new Map<string, MiniAppManifest>();
+        for (const app of INITIAL_MINI_APPS) map.set(app.id, app);
+        for (const item of parsed) {
+          const existing = map.get(item.id);
+          map.set(item.id, existing ? { ...existing, ...item } : item);
+        }
+        return Array.from(map.values());
+      }
     }
   } catch {
     // ignore

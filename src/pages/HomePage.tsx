@@ -84,6 +84,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
   // Icon mapping
   const getAppIcon = (_iconName: string, id: string) => {
     switch (id) {
+      case 'securo-finance':
+        return <ShieldCheck className="w-6 h-6 text-white" />;
       case 'miniapp-starter-template':
         return <Boxes className="w-6 h-6 text-white" />;
       case 'ethiotax-salary':

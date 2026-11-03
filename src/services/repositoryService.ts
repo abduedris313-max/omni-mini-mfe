@@ -9,7 +9,12 @@ const STORAGE_KEY_REVIEWS = 'omnimini_reviews_repo_v3';
 function getLocalApps(): MiniAppManifest[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_APPS);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return mergeApps(INITIAL_MINI_APPS, parsed);
+      }
+    }
   } catch (e) {
     console.warn('Failed to parse local apps cache', e);
   }

@@ -4,6 +4,75 @@ import { STARTER_MINI_APP_MANIFEST } from '../templates/miniAppStarter';
 export const INITIAL_MINI_APPS: MiniAppManifest[] = [
   STARTER_MINI_APP_MANIFEST,
   {
+    id: 'securo-finance',
+    name: 'Securo Finance & ERP',
+    shortName: 'Securo',
+    version: '1.8.0',
+    category: 'finance',
+    icon: 'ShieldCheck',
+    iconBg: '#4f46e5',
+    gradient: 'from-indigo-600 to-emerald-600',
+    summary:
+      'Self-hosted Personal & Business Finance Manager: Mortgage splits, Property Equity, Rule Engine, Open Banking & B2B Invoices',
+    description:
+      'Cloned and adapted from github.com/securo-finance/securo. Full-featured personal & business workspace bookkeeping with 13 modular capabilities: multi-account ledger, integer-cent mortgage principal/interest splits, collateralized real-estate/vehicle equity (secured_asset_id), recursive AND/OR auto-categorization rule trees, Open Banking batch import (SimpleFIN, Enable Banking, Pluggy, OFX/CSV), Splitwise-style group expenses, and B2B client invoicing.',
+    author: {
+      name: 'Securo Finance OSS',
+      email: 'maintainers@securo.finance',
+      verified: true,
+      org: 'securo-finance/securo',
+    },
+    rating: 5.0,
+    reviewCount: 0,
+    downloadCount: 0,
+    sizeKb: 176,
+    permissions: ['storage', 'auth', 'notifications', 'clipboard'],
+    status: 'published',
+    isBuiltin: true,
+    releaseNotes:
+      'Ported Securo multi-workspace (personal/business), parseCents mortgage split calculator, getPropertyEquity collateral engine, AND/OR RuleConditionNode evaluator, and Super App Wallet sync.',
+    updatedAt: '2026-11-02',
+    screenshots: [
+      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80',
+    ],
+    pluggableSettingsSchema: [
+      {
+        id: 'defaultWorkspace',
+        label: 'Default Startup Workspace',
+        description: 'Choose whether Securo opens in Personal Wealth or Business ERP mode',
+        type: 'select',
+        options: [
+          { label: 'Personal Wealth Workspace', value: 'personal' },
+          { label: 'Business / Freelance ERP Workspace', value: 'business' },
+        ],
+        defaultValue: 'personal',
+      },
+      {
+        id: 'baseCurrency',
+        label: 'Workspace Base Currency',
+        description: 'Primary currency symbol across accounts, equity, and invoices',
+        type: 'select',
+        options: [
+          { label: 'US Dollar (USD)', value: 'USD' },
+          { label: 'Euro (EUR)', value: 'EUR' },
+          { label: 'Ethiopian Birr (ETB)', value: 'ETB' },
+          { label: 'Brazilian Real (BRL)', value: 'BRL' },
+          { label: 'British Pound (GBP)', value: 'GBP' },
+        ],
+        defaultValue: 'USD',
+      },
+      {
+        id: 'autoSyncSuperWallet',
+        label: 'Mirror Ledger Entries to Super App Wallet',
+        description:
+          'Automatically credit or deduct the host Super App shared wallet when posting Securo transactions',
+        type: 'switch',
+        defaultValue: true,
+      },
+    ],
+    entrypoint: 'SecuroFinanceApp',
+  },
+  {
     id: 'ethiotax-salary',
     name: 'EthioTax EFDRE Salary',
     shortName: 'EthioTax',

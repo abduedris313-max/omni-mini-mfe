@@ -11,6 +11,7 @@ import { NoteFlowApp } from './NoteFlowEditor';
 import { CodeCraftApp } from './CodeCraftScratchpad';
 import { FinTrackApp } from './FinTrackBudget';
 import { EthioTaxApp } from './EthioTaxSalary';
+import { SecuroFinanceApp } from './SecuroFinance';
 import { StarterMiniApp } from '../templates/miniAppStarter';
 import {
   ChevronLeft,
@@ -64,6 +65,8 @@ export const MiniAppContainer: React.FC = () => {
     switch (app.id) {
       case 'miniapp-starter-template':
         return <StarterMiniApp key={reloadKey} sdk={sdk} />;
+      case 'securo-finance':
+        return <SecuroFinanceApp key={reloadKey} sdk={sdk} />;
       case 'ethiotax-salary':
         return <EthioTaxApp key={reloadKey} sdk={sdk} />;
       case 'fintrack-budget':

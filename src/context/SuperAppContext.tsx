@@ -148,6 +148,11 @@ const DEFAULT_SETTINGS: SuperAppSettings = {
       enableDebugBanner: true,
       sampleCheckoutAmount: 5,
     },
+    'securo-finance': {
+      defaultWorkspace: 'personal',
+      baseCurrency: 'USD',
+      autoSyncSuperWallet: true,
+    },
     'ethiotax-salary': {
       pensionScheme: 'standard',
       enableCostSharingDefault: false,
@@ -351,10 +356,25 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [installedAppIds, setInstalledAppIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('omnimini_installed_apps_v2');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        if (
+          Array.isArray(parsed) &&
+          !localStorage.getItem('omnimini_securo_seeded_v1')
+        ) {
+          localStorage.setItem('omnimini_securo_seeded_v1', '1');
+          if (!parsed.includes('securo-finance')) {
+            const merged = ['securo-finance', ...parsed];
+            localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(merged));
+            return merged;
+          }
+        }
+        return parsed;
+      }
     } catch (e) {
       console.warn('Failed loading installed apps', e);
     }
+    localStorage.setItem('omnimini_securo_seeded_v1', '1');
     // Default installed apps from Super App Starter Config
     return SUPER_APP_STARTER_CONFIG.preinstalledMiniAppIds;
   });
@@ -383,7 +403,7 @@ export const SuperAppProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const installApp = async (appId: string) => {
     if (!installedAppIds.includes(appId)) {
-      const next = [...installedAppIds, appId].slice(-10);
+      const next = [...installedAppIds, appId].slice(-16);
       setInstalledAppIds(next);
       localStorage.setItem('omnimini_installed_apps_v2', JSON.stringify(next));
       if (auth.currentUser) {

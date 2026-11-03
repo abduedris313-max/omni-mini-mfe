@@ -65,6 +65,7 @@ export const SUPER_APP_STARTER_CONFIG: SuperAppStarterConfig = {
     maxTopUp: 2500,
   },
   preinstalledMiniAppIds: [
+    'securo-finance',
     'miniapp-starter-template',
     'ethiotax-salary',
     'fintrack-budget',
