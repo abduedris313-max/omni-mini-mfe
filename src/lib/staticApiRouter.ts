@@ -179,6 +179,130 @@ export async function handleStaticApiRequest(
     });
   }
 
+  // 6. GET /api/securo/state
+  if (subPath === 'securo/state' && method === 'GET') {
+    let savedState = null;
+    try {
+      const raw = localStorage.getItem('omnimini_securo_backend_state_v1');
+      if (raw) savedState = JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+    return jsonResponse({
+      success: true,
+      service: 'Securo Finance Static Edge Engine',
+      hasState: Boolean(savedState),
+      data: savedState,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // 7. POST /api/securo/sync
+  if (subPath === 'securo/sync' && method === 'POST') {
+    let body: Record<string, any> = {};
+    try {
+      if (typeof init?.body === 'string') {
+        body = JSON.parse(init.body);
+      }
+    } catch {
+      // ignore
+    }
+    const nowIso = new Date().toISOString();
+    const stateToSave = {
+      activeWorkspaceId: body.activeWorkspaceId || 'ws-personal',
+      accounts: Array.isArray(body.accounts) ? body.accounts : [],
+      assets: Array.isArray(body.assets) ? body.assets : [],
+      transactions: Array.isArray(body.transactions) ? body.transactions : [],
+      rules: Array.isArray(body.rules) ? body.rules : [],
+      splits: Array.isArray(body.splits) ? body.splits : [],
+      invoices: Array.isArray(body.invoices) ? body.invoices : [],
+      lastSyncedAt: nowIso,
+    };
+    try {
+      localStorage.setItem('omnimini_securo_backend_state_v1', JSON.stringify(stateToSave));
+    } catch {
+      // ignore
+    }
+    return jsonResponse({
+      success: true,
+      lastSyncedAt: nowIso,
+    });
+  }
+
+  // 8. POST /api/securo/open-banking/import
+  if (subPath === 'securo/open-banking/import' && method === 'POST') {
+    let body: Record<string, any> = {};
+    try {
+      if (typeof init?.body === 'string') {
+        body = JSON.parse(init.body);
+      }
+    } catch {
+      // ignore
+    }
+    const provider = body.provider || 'simplefin';
+    const providerBatches: Record<
+      string,
+      Array<{ payee: string; description: string; amount: number; defaultCat: string }>
+    > = {
+      simplefin: [
+        {
+          payee: 'WHOLE FOODS MKT #1042 AUSTIN',
+          description: 'SimpleFIN US Bridge · POS Debit Card',
+          amount: -142.85,
+          defaultCat: 'Uncategorized',
+        },
+        {
+          payee: 'AWS EMEA SARL CLOUD',
+          description: 'SimpleFIN US Bridge · Monthly S3 & EC2 compute',
+          amount: -49.9,
+          defaultCat: 'Uncategorized',
+        },
+      ],
+      enable_banking: [
+        {
+          payee: 'HETZNER ONLINE GMBH',
+          description: 'Enable Banking PSD2 EU · SEPA Direct Debit',
+          amount: -89.0,
+          defaultCat: 'Uncategorized',
+        },
+        {
+          payee: 'REWE MARKT BERLIN',
+          description: 'Enable Banking PSD2 EU · Girocard',
+          amount: -64.15,
+          defaultCat: 'Groceries',
+        },
+      ],
+      pluggy: [
+        {
+          payee: 'PIX TRANSF NUBANK',
+          description: 'Pluggy Open Finance Brasil · Instant Sync',
+          amount: 1850.0,
+          defaultCat: 'Client Revenue',
+        },
+        {
+          payee: 'GITHUB INC CLOUD',
+          description: 'Pluggy Open Finance Brasil · Actions & Copilot',
+          amount: -39.0,
+          defaultCat: 'Uncategorized',
+        },
+      ],
+      csv: [
+        {
+          payee: 'TRADER JOES #412',
+          description: 'OFX / CAMT.053 Statement Parser',
+          amount: -94.5,
+          defaultCat: 'Uncategorized',
+        },
+      ],
+    };
+    return jsonResponse({
+      success: true,
+      provider,
+      rows: providerBatches[provider] || providerBatches.simplefin,
+      syncedAt: new Date().toISOString(),
+    });
+  }
+
   return null;
 }
 
@@ -242,7 +366,7 @@ export function installStaticApiInterceptor(isStaticHost: boolean): void {
           ? input.toString()
           : input.url;
 
-      const isApiCall = /(?:^|\/)api\/(miniapps|developer\/analytics|auth\/google|health)/.test(
+      const isApiCall = /(?:^|\/)api\/(miniapps|developer\/analytics|auth\/google|health|securo)/.test(
         urlStr
       );
 

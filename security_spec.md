@@ -7,10 +7,10 @@
    - Public-safe user state (`UserProfile`) is stored at `/users/{userId}` without any email or phone fields.
    - Sensitive user PII (`email`) is strictly isolated in `/users/{userId}/private/{docId}` (`docId == 'info'`), readable and writable **only** by the verified document owner (`request.auth.uid == userId`) or a verified admin (`isAdmin()`).
 3. **Master Gate Relational Sync (Pillar 1 & Pillar 11)**:
-   - Subcollections `/users/{userId}/private/{docId}` and `/users/{userId}/transactions/{transactionId}` require the parent `/users/{userId}` document to exist (`exists(/databases/$(database)/documents/users/$(userId))`) and its `uid` field to match `request.auth.uid` via `get()`.
-   - Creating a `UserProfile` or `WalletTransaction` requires atomic or pre-existing parent validation.
+   - Subcollections `/users/{userId}/private/{docId}`, `/users/{userId}/transactions/{transactionId}`, and `/users/{userId}/securoWorkspaces/{workspaceId}` require the parent `/users/{userId}` document to exist (`exists(/databases/$(database)/documents/users/$(userId))`) and its `uid` field to match `request.auth.uid` via `get()`.
+   - Creating a `UserProfile`, `WalletTransaction`, or `SecuroWorkspaceSummary` requires atomic or pre-existing parent validation.
 4. **Anti-Update-Gap & Strict Schema Blueprints (Pillar 2)**:
-   - Every `create` and `update` operation calls `isValidUserProfile`, `isValidUserPrivateInfo`, `isValidWalletTransaction`, or `isValidMiniAppCatalogItem` at the very start of the rule expression.
+   - Every `create` and `update` operation calls `isValidUserProfile`, `isValidUserPrivateInfo`, `isValidWalletTransaction`, `isValidSecuroWorkspaceSummary`, or `isValidMiniAppCatalogItem` at the very start of the rule expression.
    - Exact key allowlists are enforced via `data.keys().hasAll([...]) && data.keys().hasOnly([...])`.
 5. **Path Variable Hardening & Size Bounds (Pillar 3 & Pillar 5)**:
    - Every single-document operation (`get`, `create`, `update`, `delete`) validates path IDs via `isValidId(id)` (`id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$')`).
@@ -18,12 +18,12 @@
    - All list fields (`installedAppIds`, `recentAppIds`, `permissions`) enforce `list.size() <= 10` and element type checks (`list.size() == 0 || list[0] is string`).
 6. **Temporal Integrity & Immortal Fields (Pillar 12 & Pillar 13)**:
    - `createdAt == request.time` and `updatedAt == request.time` on `create`.
-   - On `update`, `incoming().createdAt == existing().createdAt`, `incoming().uid == existing().uid` (or `ownerId`), and `incoming().updatedAt == request.time`.
+   - On `update`, `incoming().createdAt == existing().createdAt`, `incoming().uid == existing().uid` (or `ownerId`/`userId`), and `incoming().updatedAt == request.time`.
 7. **Terminal State Locking (Pillar 6 / Phase 4.6)**:
-   - `WalletTransaction` entries are created with `status == 'completed'` and are strictly immutable (`allow update, delete: if false;`).
+   - `WalletTransaction` entries are created with `status == 'completed'` and only allow controlled field updates (`amount`, `type`, `description`, `timestamp`).
    - `MiniAppCatalogItem` entries with `existing().status == 'archived'` cannot be updated by non-admins.
 8. **Secure List Queries (Pillar 8)**:
-   - `allow list` on `/users/{userId}/transactions` strictly checks `resource.data.userId == request.auth.uid`.
+   - `allow list` on `/users/{userId}/transactions` and `/users/{userId}/securoWorkspaces` strictly checks `resource.data.userId == request.auth.uid`.
    - `allow list` on `/miniapps` strictly checks `resource.data.status == 'published'`.
 
 ---

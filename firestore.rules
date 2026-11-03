@@ -130,6 +130,53 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidSecuroWorkspaceSummary(data) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'name',
+          'kind',
+          'currency',
+          'liquidAssets',
+          'totalLiabilities',
+          'propertyEquity',
+          'netWorth',
+          'accountCount',
+          'transactionCount',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'userId',
+          'name',
+          'kind',
+          'currency',
+          'liquidAssets',
+          'totalLiabilities',
+          'propertyEquity',
+          'netWorth',
+          'accountCount',
+          'transactionCount',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.userId == request.auth.uid &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.kind is string && data.kind.size() <= 16 && (data.kind == 'personal' || data.kind == 'business') &&
+        data.currency is string && data.currency.size() >= 3 && data.currency.size() <= 8 &&
+        data.liquidAssets is number && data.liquidAssets >= 0 && data.liquidAssets <= 100000000 &&
+        data.totalLiabilities is number && data.totalLiabilities >= 0 && data.totalLiabilities <= 100000000 &&
+        data.propertyEquity is number && data.propertyEquity >= -100000000 && data.propertyEquity <= 100000000 &&
+        data.netWorth is number && data.netWorth >= -100000000 && data.netWorth <= 100000000 &&
+        data.accountCount is int && data.accountCount >= 0 && data.accountCount <= 500 &&
+        data.transactionCount is int && data.transactionCount >= 0 && data.transactionCount <= 50000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     function isValidMiniAppCatalogItem(data) {
       return data.keys().hasAll([
           'id',
@@ -333,6 +380,65 @@ service cloud.firestore {
         allow delete: if isVerifiedUser() &&
           isValidId(userId) &&
           isValidId(transactionId) &&
+          (isOwner(userId) || isAdmin());
+      }
+
+      // Subcollection: /users/{userId}/securoWorkspaces/{workspaceId}
+      match /securoWorkspaces/{workspaceId} {
+        allow get: if isSignedIn() &&
+          isValidId(userId) &&
+          isValidId(workspaceId) &&
+          (isOwner(userId) || isAdmin()) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == userId;
+
+        allow list: if isSignedIn() &&
+          resource.data.userId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(workspaceId) &&
+          isOwner(userId) &&
+          isValidSecuroWorkspaceSummary(incoming()) &&
+          incoming().id == workspaceId &&
+          incoming().userId == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(workspaceId) &&
+          isValidSecuroWorkspaceSummary(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid &&
+          (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'name',
+                'kind',
+                'currency',
+                'liquidAssets',
+                'totalLiabilities',
+                'propertyEquity',
+                'netWorth',
+                'accountCount',
+                'transactionCount',
+                'updatedAt'
+              ])
+            )
+          );
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(workspaceId) &&
           (isOwner(userId) || isAdmin());
       }
     }

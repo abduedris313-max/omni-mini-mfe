@@ -276,3 +276,162 @@ apiRouter.post('/auth/google', (req: Request, res: Response) => {
     message: 'Authenticated with Google successfully',
   });
 });
+
+// ============================================================================
+// SECURO FINANCE & ERP BACKEND SERVICE ROUTES (/api/securo/*)
+// ============================================================================
+interface SecuroBackendSnapshot {
+  activeWorkspaceId: string;
+  accounts: any[];
+  assets: any[];
+  transactions: any[];
+  rules: any[];
+  splits: any[];
+  invoices: any[];
+  lastSyncedAt: string;
+}
+
+let securoServerState: SecuroBackendSnapshot | null = null;
+
+// GET /api/securo/state - Retrieve server-persisted Securo workspace state
+apiRouter.get('/securo/state', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    service: 'Securo Finance ERP Engine',
+    hasState: Boolean(securoServerState),
+    data: securoServerState,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// POST /api/securo/sync - Synchronize client Securo ledger, equity, rules & B2B invoices with backend
+apiRouter.post('/securo/sync', (req: Request, res: Response) => {
+  const {
+    activeWorkspaceId,
+    accounts,
+    assets,
+    transactions,
+    rules,
+    splits,
+    invoices,
+  } = req.body || {};
+
+  const nowIso = new Date().toISOString();
+  securoServerState = {
+    activeWorkspaceId: activeWorkspaceId || 'ws-personal',
+    accounts: Array.isArray(accounts) ? accounts : [],
+    assets: Array.isArray(assets) ? assets : [],
+    transactions: Array.isArray(transactions) ? transactions : [],
+    rules: Array.isArray(rules) ? rules : [],
+    splits: Array.isArray(splits) ? splits : [],
+    invoices: Array.isArray(invoices) ? invoices : [],
+    lastSyncedAt: nowIso,
+  };
+
+  const wsAccounts = securoServerState.accounts.filter(
+    (a) => a.workspaceId === securoServerState?.activeWorkspaceId
+  );
+  const wsAssets = securoServerState.assets.filter(
+    (a) => a.workspaceId === securoServerState?.activeWorkspaceId
+  );
+
+  const liquidAssets = wsAccounts
+    .filter((a) => Number(a.balance) > 0)
+    .reduce((sum, a) => sum + Number(a.balance), 0);
+  const totalLiabilities = wsAccounts
+    .filter((a) => Number(a.balance) < 0)
+    .reduce((sum, a) => sum + Math.abs(Number(a.balance)), 0);
+  const totalAssetValue = wsAssets.reduce(
+    (sum, a) => sum + Number(a.quantity || 1) * Number(a.current_price || 0),
+    0
+  );
+
+  res.json({
+    success: true,
+    lastSyncedAt: nowIso,
+    telemetry: {
+      activeWorkspaceId: securoServerState.activeWorkspaceId,
+      liquidAssets,
+      totalLiabilities,
+      totalAssetValue,
+      netWorth: liquidAssets + totalAssetValue - totalLiabilities,
+      accountCount: wsAccounts.length,
+      transactionCount: securoServerState.transactions.filter(
+        (t) => t.workspaceId === securoServerState?.activeWorkspaceId
+      ).length,
+    },
+  });
+});
+
+// POST /api/securo/open-banking/import - Server-side Open Banking Statement Connector
+apiRouter.post('/securo/open-banking/import', (req: Request, res: Response) => {
+  const provider = (req.body?.provider || 'simplefin') as
+    | 'simplefin'
+    | 'enable_banking'
+    | 'pluggy'
+    | 'csv';
+
+  const providerBatches: Record<
+    string,
+    Array<{ payee: string; description: string; amount: number; defaultCat: string }>
+  > = {
+    simplefin: [
+      {
+        payee: 'WHOLE FOODS MKT #1042 AUSTIN',
+        description: 'SimpleFIN US Bridge · POS Debit Card',
+        amount: -142.85,
+        defaultCat: 'Uncategorized',
+      },
+      {
+        payee: 'AWS EMEA SARL CLOUD',
+        description: 'SimpleFIN US Bridge · Monthly S3 & EC2 compute',
+        amount: -49.9,
+        defaultCat: 'Uncategorized',
+      },
+    ],
+    enable_banking: [
+      {
+        payee: 'HETZNER ONLINE GMBH',
+        description: 'Enable Banking PSD2 EU · SEPA Direct Debit',
+        amount: -89.0,
+        defaultCat: 'Uncategorized',
+      },
+      {
+        payee: 'REWE MARKT BERLIN',
+        description: 'Enable Banking PSD2 EU · Girocard',
+        amount: -64.15,
+        defaultCat: 'Groceries',
+      },
+    ],
+    pluggy: [
+      {
+        payee: 'PIX TRANSF NUBANK',
+        description: 'Pluggy Open Finance Brasil · Instant Sync',
+        amount: 1850.0,
+        defaultCat: 'Client Revenue',
+      },
+      {
+        payee: 'GITHUB INC CLOUD',
+        description: 'Pluggy Open Finance Brasil · Actions & Copilot',
+        amount: -39.0,
+        defaultCat: 'Uncategorized',
+      },
+    ],
+    csv: [
+      {
+        payee: 'TRADER JOES #412',
+        description: 'OFX / CAMT.053 Statement Parser',
+        amount: -94.5,
+        defaultCat: 'Uncategorized',
+      },
+    ],
+  };
+
+  res.json({
+    success: true,
+    provider,
+    rows: providerBatches[provider] || providerBatches.simplefin,
+    syncedAt: new Date().toISOString(),
+  });
+});
+

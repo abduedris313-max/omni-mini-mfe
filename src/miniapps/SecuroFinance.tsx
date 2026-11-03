@@ -1,5 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { MiniAppBridgeSDK } from '../types/miniapp';
+import {
+  auth,
+  isStaticHostEnvironment,
+  getResolvedApiPath,
+  safeApiFetch,
+} from '../lib/firebase';
+import { firestoreService } from '../services/firestoreService';
+import { offlineSyncService } from '../services/offlineSyncService';
 import {
   ShieldCheck,
   Landmark,
@@ -10,7 +18,6 @@ import {
   Plus,
   Trash2,
   RefreshCw,
-  Filter,
   Sparkles,
   FileSpreadsheet,
   Users,
@@ -21,9 +28,10 @@ import {
   CreditCard,
   Wallet,
   Scale,
-  FolderKanban,
   Split,
   ArrowRightLeft,
+  QrCode,
+  CloudCheck,
 } from 'lucide-react';
 
 /**
@@ -803,6 +811,56 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
     [invoices, activeWorkspace.id]
   );
 
+  const [hostWalletBalance, setHostWalletBalance] = useState<number>(() =>
+    sdk.payment.getBalance()
+  );
+  const [lastBackendSync, setLastBackendSync] = useState<string>('Synced');
+
+  // Subscribe to Super App lifecycle start & refresh shared wallet balance
+  useEffect(() => {
+    const unsub = sdk.lifecycle.onStart(() => {
+      setHostWalletBalance(sdk.payment.getBalance());
+    });
+    return unsub;
+  }, [sdk]);
+
+  // Hydrate initial state from /api/securo/state if available on server
+  useEffect(() => {
+    let active = true;
+    const fetchBackendState = async () => {
+      try {
+        const res = await safeApiFetch(
+          getResolvedApiPath('api/securo/state'),
+          undefined,
+          isStaticHostEnvironment()
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (active && json?.hasState && json?.data) {
+          const d = json.data;
+          if (Array.isArray(d.accounts) && d.accounts.length > 0) {
+            setAccounts(d.accounts);
+            sdk.storage.setItem('securo_accounts_v1', d.accounts);
+          }
+          if (Array.isArray(d.assets) && d.assets.length > 0) {
+            setAssets(d.assets);
+            sdk.storage.setItem('securo_assets_v1', d.assets);
+          }
+          if (Array.isArray(d.transactions) && d.transactions.length > 0) {
+            setTransactions(d.transactions);
+            sdk.storage.setItem('securo_transactions_v1', d.transactions);
+          }
+        }
+      } catch {
+        // Local sandboxed state remains authoritative when offline
+      }
+    };
+    void fetchBackendState();
+    return () => {
+      active = false;
+    };
+  }, [sdk.storage]);
+
   // Financial Aggregations (Securo Net Worth & Cashflow Engine)
   const metrics = useMemo(() => {
     const liquidAssets = wsAccounts
@@ -815,6 +873,11 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
 
     const portfolioAndPhysicalAssets = wsAssets.reduce(
       (sum, a) => sum + a.quantity * a.current_price,
+      0
+    );
+
+    const propertyEquity = wsAssets.reduce(
+      (sum, asset) => sum + getPropertyEquity(asset, wsAccounts).equity,
       0
     );
 
@@ -832,6 +895,7 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
       liquidAssets,
       totalLiabilities,
       portfolioAndPhysicalAssets,
+      propertyEquity,
       netWorth,
       monthlyIncome,
       monthlyExpenses,
@@ -842,6 +906,108 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
     };
   }, [wsAccounts, wsAssets, transactions, activeWorkspace.id]);
 
+  // Synchronize workspace state with Super App Shared Summary, Express/Static Backend (/api/securo/sync),
+  // and Cloud Firestore (/users/{uid}/securoWorkspaces/{workspaceId}) + IndexedDB Offline Queue
+  const syncWithSuperAppAndBackend = useCallback(async () => {
+    const sharedSummary = {
+      workspaceId: activeWorkspace.id,
+      workspaceName: activeWorkspace.name,
+      workspaceKind: activeWorkspace.kind,
+      currency: currencyCode,
+      currencySymbol,
+      liquidAssets: Number(metrics.liquidAssets.toFixed(2)),
+      totalLiabilities: Number(metrics.totalLiabilities.toFixed(2)),
+      propertyEquity: Number(metrics.propertyEquity.toFixed(2)),
+      netWorth: Number(metrics.netWorth.toFixed(2)),
+      accountsCount: wsAccounts.length,
+      transactionsCount: wsTransactions.length,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. Write shared summary to sandboxed storage so Super App HomePage & WalletPage read live metrics
+    sdk.storage.setItem('securo_shared_wallet_summary', sharedSummary);
+
+    // 2. Push state to Backend Service (/api/securo/sync)
+    try {
+      const res = await safeApiFetch(
+        getResolvedApiPath('api/securo/sync'),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            activeWorkspaceId: activeWorkspace.id,
+            accounts,
+            assets,
+            transactions,
+            rules,
+            splits,
+            invoices,
+          }),
+        },
+        isStaticHostEnvironment()
+      );
+      if (res.ok) {
+        setLastBackendSync(
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        );
+      }
+    } catch {
+      setLastBackendSync('Local Queue');
+    }
+
+    // 3. Synchronize with Cloud Firestore & Local-First IndexedDB Offline Sync Queue
+    const hostUser = sdk.auth.getUser();
+    const uid = auth.currentUser?.uid || hostUser?.id;
+    if (uid) {
+      const firestoreSummary = {
+        id: activeWorkspace.id,
+        userId: uid,
+        name: activeWorkspace.name,
+        kind: activeWorkspace.kind,
+        currency: currencyCode,
+        liquidAssets: sharedSummary.liquidAssets,
+        totalLiabilities: sharedSummary.totalLiabilities,
+        propertyEquity: sharedSummary.propertyEquity,
+        netWorth: sharedSummary.netWorth,
+        accountCount: wsAccounts.length,
+        transactionCount: wsTransactions.length,
+      };
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        offlineSyncService.enqueue({
+          type: 'securo_workspace',
+          summary: firestoreSummary,
+        });
+      } else {
+        firestoreService.syncSecuroWorkspaceSummary(firestoreSummary).catch(() => {
+          offlineSyncService.enqueue({
+            type: 'securo_workspace',
+            summary: firestoreSummary,
+          });
+        });
+      }
+    }
+  }, [
+    activeWorkspace,
+    currencyCode,
+    currencySymbol,
+    metrics,
+    wsAccounts.length,
+    wsTransactions.length,
+    accounts,
+    assets,
+    transactions,
+    rules,
+    splits,
+    invoices,
+    sdk.storage,
+    sdk.auth,
+  ]);
+
+  useEffect(() => {
+    void syncWithSuperAppAndBackend();
+  }, [syncWithSuperAppAndBackend]);
+
   // Switch Workspace
   const handleSwitchWorkspace = (wsId: string) => {
     setActiveWorkspaceId(wsId);
@@ -850,14 +1016,37 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
     sdk.ui.hapticFeedback('light');
   };
 
+  // Scan QR Code Bill or Invoice via Super App Native Bridge
+  const handleScanBillQRCode = async () => {
+    sdk.ui.hapticFeedback('light');
+    const scanned = await sdk.device.scanQRCode();
+    if (!scanned) return;
+
+    const amountVal = scanned.amount && scanned.amount > 0 ? scanned.amount : 45.0;
+    const recipientName = scanned.recipient || 'QR Merchant / Invoice';
+    setTxType('expense');
+    setTxPayee(recipientName);
+    setTxAmount(String(amountVal));
+    setTxDescription(scanned.note || `Scanned via OmniMini QR (${scanned.rawValue})`);
+    setShowAddTxModal(true);
+    sdk.ui.showToast(`Pre-filled ${formatMoney(amountVal)} for ${recipientName}`, 'info');
+  };
+
   // Sync Liquid Checking/Savings Balance with Super App Shared Wallet
   const handleSyncToSuperAppWallet = async () => {
     sdk.ui.hapticFeedback('medium');
+    if (sdk.device.hasPermission('biometrics')) {
+      const verified = await sdk.device.authenticateBiometrics(
+        `Authorize syncing ${formatMoney(metrics.liquidAssets)} from Securo (${activeWorkspace.name}) to Super App Wallet`
+      );
+      if (!verified) return;
+    }
     const result = await sdk.payment.syncSharedBalance(
       Math.max(0, Number(metrics.liquidAssets.toFixed(2))),
       `Securo (${activeWorkspace.name}) Liquid Balance Sync`
     );
     if (result.success) {
+      setHostWalletBalance(result.syncedBalance);
       sdk.ui.showToast(
         `Super App Wallet synced to ${formatMoney(result.syncedBalance)}`,
         'success'
@@ -993,6 +1182,7 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
       } else {
         await sdk.payment.pay(Math.abs(signedAmount), `Securo: ${finalPayee}`);
       }
+      setHostWalletBalance(sdk.payment.getBalance());
     }
 
     sdk.ui.hapticFeedback('success');
@@ -1116,71 +1306,52 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
     sdk.ui.showToast(`Created Securo Rule "${created.name}"`, 'success');
   };
 
-  // Run Open Banking / Statement Batch Import through Securo Rule Engine
-  const handleRunOpenBankingImport = () => {
+  // Run Open Banking / Statement Batch Import through Backend Service (/api/securo/open-banking/import) & Securo Rule Engine
+  const handleRunOpenBankingImport = async () => {
     const targetAcc = wsAccounts[0];
     if (!targetAcc) {
       sdk.ui.showToast('Create a workspace account before importing statements', 'warning');
       return;
     }
 
-    const batchSamples: Record<
-      typeof importProvider,
-      Array<{ payee: string; description: string; amount: number; defaultCat: string }>
-    > = {
-      simplefin: [
+    let rawRows: Array<{
+      payee: string;
+      description: string;
+      amount: number;
+      defaultCat: string;
+    }> = [];
+
+    try {
+      const res = await safeApiFetch(
+        getResolvedApiPath('api/securo/open-banking/import'),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: importProvider }),
+        },
+        isStaticHostEnvironment()
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.rows)) {
+          rawRows = json.rows;
+        }
+      }
+    } catch {
+      // Fallback to local sample if offline
+    }
+
+    if (rawRows.length === 0) {
+      rawRows = [
         {
           payee: 'WHOLE FOODS MKT #1042 AUSTIN',
           description: 'POS Debit Card Purchase',
           amount: -142.85,
           defaultCat: 'Uncategorized',
         },
-        {
-          payee: 'AWS EMEA SARL CLOUD',
-          description: 'Monthly S3 & EC2 compute',
-          amount: -49.9,
-          defaultCat: 'Uncategorized',
-        },
-      ],
-      enable_banking: [
-        {
-          payee: 'HETZNER ONLINE GMBH',
-          description: 'SEPA Direct Debit Cloud Server',
-          amount: -89.0,
-          defaultCat: 'Uncategorized',
-        },
-        {
-          payee: 'REWE MARKT BERLIN',
-          description: 'Contactless Girocard',
-          amount: -64.15,
-          defaultCat: 'Groceries',
-        },
-      ],
-      pluggy: [
-        {
-          payee: 'PIX TRANSF NUBANK',
-          description: 'Open Finance Brasil Instant Sync',
-          amount: 1850.0,
-          defaultCat: 'Client Revenue',
-        },
-        {
-          payee: 'GITHUB INC CLOUD',
-          description: 'Copilot & Actions runners',
-          amount: -39.0,
-          defaultCat: 'Uncategorized',
-        },
-      ],
-      csv: [
-        {
-          payee: 'TRADER JOES #412',
-          description: 'OFX / CAMT.053 Statement Import',
-          amount: -94.5,
-          defaultCat: 'Uncategorized',
-        },
-      ],
-    };
+      ];
+    }
 
-    const rawRows = batchSamples[importProvider];
     let netDelta = 0;
     let rulesTriggered = 0;
     const updatedRules = [...rules];
@@ -1235,7 +1406,7 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
 
     sdk.ui.hapticFeedback('success');
     sdk.ui.showToast(
-      `Imported ${importedTxs.length} rows (${rulesTriggered} auto-categorized by Rule Engine)`,
+      `Imported ${importedTxs.length} rows via /api/securo/open-banking (${rulesTriggered} auto-categorized)`,
       'success'
     );
   };
@@ -1419,6 +1590,13 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
                   {formatMoney(metrics.portfolioAndPhysicalAssets)} · Debt{' '}
                   {formatMoney(metrics.totalLiabilities)}
                 </p>
+                <p className="text-[10px] text-emerald-400/90 font-mono mt-1 flex items-center gap-1">
+                  <CloudCheck className="w-3 h-3" />
+                  <span>
+                    Super App Wallet: ${hostWalletBalance.toFixed(2)} · Cloud & API:{' '}
+                    {lastBackendSync}
+                  </span>
+                </p>
               </div>
               <button
                 onClick={handleSyncToSuperAppWallet}
@@ -1453,20 +1631,20 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => {
                 setTxType('expense');
                 setShowAddTxModal(true);
               }}
-              className="p-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 flex items-center gap-3 text-left transition"
+              className="p-3 rounded-2xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 flex flex-col gap-1.5 text-left transition"
             >
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center shrink-0">
                 <Plus className="w-4 h-4" />
               </div>
               <div>
                 <div className="text-xs font-bold text-white">Record Entry</div>
-                <div className="text-[10px] text-slate-400">Income, Expense or Split</div>
+                <div className="text-[10px] text-slate-400">Ledger & Rules</div>
               </div>
             </button>
 
@@ -1475,14 +1653,27 @@ export const SecuroFinanceApp: React.FC<{ sdk: MiniAppBridgeSDK }> = ({ sdk }) =
                 setTxType('mortgage_split');
                 setShowAddTxModal(true);
               }}
-              className="p-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 flex items-center gap-3 text-left transition"
+              className="p-3 rounded-2xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 flex flex-col gap-1.5 text-left transition"
             >
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
                 <Split className="w-4 h-4" />
               </div>
               <div>
                 <div className="text-xs font-bold text-white">Mortgage Split</div>
-                <div className="text-[10px] text-slate-400">Principal vs. Interest</div>
+                <div className="text-[10px] text-slate-400">Principal / Int.</div>
+              </div>
+            </button>
+
+            <button
+              onClick={handleScanBillQRCode}
+              className="p-3 rounded-2xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 flex flex-col gap-1.5 text-left transition"
+            >
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0">
+                <QrCode className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Scan Bill QR</div>
+                <div className="text-[10px] text-slate-400">Native Bridge</div>
               </div>
             </button>
           </div>

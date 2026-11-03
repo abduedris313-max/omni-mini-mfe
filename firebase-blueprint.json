@@ -331,6 +331,93 @@
         "updatedAt",
         "createdAt"
       ]
+    },
+    "SecuroWorkspaceSummary": {
+      "title": "SecuroWorkspaceSummary",
+      "description": "Synchronized Securo Finance & ERP workspace state and wealth metrics for a Super App user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Workspace identifier (e.g. ws-personal or ws-business).",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Workspace display name.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "kind": {
+          "type": "string",
+          "description": "Workspace classification.",
+          "enum": ["personal", "business"]
+        },
+        "currency": {
+          "type": "string",
+          "description": "ISO currency code.",
+          "minLength": 3,
+          "maxLength": 8
+        },
+        "liquidAssets": {
+          "type": "number",
+          "description": "Total positive cash/checking/savings balances."
+        },
+        "totalLiabilities": {
+          "type": "number",
+          "description": "Total credit card, loan, and mortgage debt."
+        },
+        "propertyEquity": {
+          "type": "number",
+          "description": "Total collateralized asset equity (value minus linked loan balances)."
+        },
+        "netWorth": {
+          "type": "number",
+          "description": "Total workspace net worth."
+        },
+        "accountCount": {
+          "type": "number",
+          "description": "Number of active accounts in the workspace."
+        },
+        "transactionCount": {
+          "type": "number",
+          "description": "Number of ledger transactions in the workspace."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "kind",
+        "currency",
+        "liquidAssets",
+        "totalLiabilities",
+        "propertyEquity",
+        "netWorth",
+        "accountCount",
+        "transactionCount",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -345,6 +432,10 @@
     "/users/{userId}/transactions/{transactionId}": {
       "schema": { "$ref": "#/entities/WalletTransaction" },
       "description": "Subcollection of immutable wallet ledger transactions belonging to the parent user."
+    },
+    "/users/{userId}/securoWorkspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/SecuroWorkspaceSummary" },
+      "description": "Subcollection of Securo Finance & ERP workspace summaries belonging to the parent user."
     },
     "/miniapps/{appId}": {
       "schema": { "$ref": "#/entities/MiniAppCatalogItem" },

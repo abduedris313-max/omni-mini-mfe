@@ -1,5 +1,9 @@
 import { enableNetwork, waitForPendingWrites } from 'firebase/firestore';
-import { firestoreService, FirestoreWalletTransaction } from './firestoreService';
+import {
+  firestoreService,
+  FirestoreWalletTransaction,
+  FirestoreSecuroWorkspaceSummary,
+} from './firestoreService';
 import { auth, db } from '../lib/firebase';
 
 export type OfflineMutationInput =
@@ -17,6 +21,10 @@ export type OfflineMutationInput =
       uid: string;
       installedAppIds: string[];
       recentAppIds: string[];
+    }
+  | {
+      type: 'securo_workspace';
+      summary: FirestoreSecuroWorkspaceSummary;
     };
 
 export type OfflineMutation = OfflineMutationInput & {
@@ -77,6 +85,11 @@ export function verifyMutationIntegrity(mutation: OfflineMutation): boolean {
       uid: mutation.uid,
       installedAppIds: mutation.installedAppIds,
       recentAppIds: mutation.recentAppIds,
+    };
+  } else if (mutation.type === 'securo_workspace') {
+    inputPayload = {
+      type: 'securo_workspace',
+      summary: mutation.summary,
     };
   } else {
     return false;
@@ -265,6 +278,14 @@ export const offlineSyncService = {
       if (mutation.type === 'user_app_lists' && item.type === 'user_app_lists' && item.uid === mutation.uid) {
         return false;
       }
+      if (
+        mutation.type === 'securo_workspace' &&
+        item.type === 'securo_workspace' &&
+        item.summary.userId === mutation.summary.userId &&
+        item.summary.id === mutation.summary.id
+      ) {
+        return false;
+      }
       return true;
     });
 
@@ -386,6 +407,9 @@ export const offlineSyncService = {
           synced++;
         } else if (item.type === 'user_app_lists') {
           await firestoreService.updateUserAppLists(item.uid, item.installedAppIds, item.recentAppIds);
+          synced++;
+        } else if (item.type === 'securo_workspace') {
+          await firestoreService.syncSecuroWorkspaceSummary(item.summary);
           synced++;
         }
       } catch (e) {

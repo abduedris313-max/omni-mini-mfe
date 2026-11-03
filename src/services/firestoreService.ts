@@ -56,6 +56,20 @@ export interface FirestoreWalletTransaction {
   timestamp: string;
 }
 
+export interface FirestoreSecuroWorkspaceSummary {
+  id: string;
+  userId: string;
+  name: string;
+  kind: 'personal' | 'business';
+  currency: string;
+  liquidAssets: number;
+  totalLiabilities: number;
+  propertyEquity: number;
+  netWorth: number;
+  accountCount: number;
+  transactionCount: number;
+}
+
 export const firestoreService = {
   /**
    * Ensures the authenticated user's profile (`/users/{uid}`) and isolated PII (`/users/{uid}/private/info`)
@@ -493,6 +507,99 @@ export const firestoreService = {
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  /**
+   * Synchronizes a Securo Finance & ERP workspace summary to `/users/{uid}/securoWorkspaces/{workspaceId}`
+   */
+  async syncSecuroWorkspaceSummary(summary: FirestoreSecuroWorkspaceSummary): Promise<void> {
+    if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+    if (isStaticHostEnvironment() || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+
+    const safeUserId = sanitizeId(summary.userId || auth.currentUser.uid, 'usr');
+    const safeWsId = sanitizeId(summary.id, 'ws');
+    const path = `users/${safeUserId}/securoWorkspaces/${safeWsId}`;
+    const docRef = doc(db, 'users', safeUserId, 'securoWorkspaces', safeWsId);
+
+    const clampMoney = (val: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, Number((Number(val) || 0).toFixed(2))));
+
+    const payloadBase = {
+      name: (summary.name || 'Securo Workspace').trim().slice(0, MAX_NAME_LENGTH),
+      kind: summary.kind === 'business' ? ('business' as const) : ('personal' as const),
+      currency: (summary.currency || 'USD').trim().slice(0, 8),
+      liquidAssets: clampMoney(summary.liquidAssets, 0, 100000000),
+      totalLiabilities: clampMoney(summary.totalLiabilities, 0, 100000000),
+      propertyEquity: clampMoney(summary.propertyEquity, -100000000, 100000000),
+      netWorth: clampMoney(summary.netWorth, -100000000, 100000000),
+      accountCount: Math.max(0, Math.min(500, Math.round(summary.accountCount || 0))),
+      transactionCount: Math.max(0, Math.min(50000, Math.round(summary.transactionCount || 0))),
+    };
+
+    try {
+      const existingSnap = await getDoc(docRef);
+      if (!existingSnap.exists()) {
+        await setDoc(docRef, {
+          id: safeWsId,
+          userId: safeUserId,
+          ...payloadBase,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await updateDoc(docRef, {
+          ...payloadBase,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (!msg.includes('offline') && !msg.includes('unavailable')) {
+        handleFirestoreError(error, OperationType.WRITE, path);
+      }
+    }
+  },
+
+  /**
+   * Retrieves all synchronized Securo workspaces for the authenticated user
+   */
+  async getSecuroWorkspaceSummaries(uid: string): Promise<FirestoreSecuroWorkspaceSummary[]> {
+    if (isStaticHostEnvironment() || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      return [];
+    }
+    const safeUserId = sanitizeId(uid, 'usr');
+    const path = `users/${safeUserId}/securoWorkspaces`;
+    try {
+      const q = query(
+        collection(db, 'users', safeUserId, 'securoWorkspaces'),
+        where('userId', '==', safeUserId)
+      );
+      const snap = await getDocs(q);
+      const results: FirestoreSecuroWorkspaceSummary[] = [];
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        results.push({
+          id: d.id,
+          userId: d.userId,
+          name: d.name,
+          kind: d.kind === 'business' ? 'business' : 'personal',
+          currency: d.currency || 'USD',
+          liquidAssets: Number(d.liquidAssets) || 0,
+          totalLiabilities: Number(d.totalLiabilities) || 0,
+          propertyEquity: Number(d.propertyEquity) || 0,
+          netWorth: Number(d.netWorth) || 0,
+          accountCount: Number(d.accountCount) || 0,
+          transactionCount: Number(d.transactionCount) || 0,
+        });
+      });
+      return results;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (msg.includes('offline') || msg.includes('unavailable')) {
+        return [];
+      }
+      handleFirestoreError(error, OperationType.LIST, path);
     }
   },
 };

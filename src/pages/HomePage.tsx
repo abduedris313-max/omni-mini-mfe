@@ -275,6 +275,81 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenAuth }) => {
         </div>
       </div>
 
+      {/* Securo Finance & ERP Live Wealth Widget */}
+      {(() => {
+        let securoSummary = {
+          workspaceName: 'Personal Wealth',
+          currencySymbol: '$',
+          liquidAssets: 60920.5,
+          propertyEquity: 261220.0,
+          netWorth: 320000.0,
+        };
+        try {
+          const raw = localStorage.getItem(
+            'miniapp_store_securo-finance_securo_shared_wallet_summary'
+          );
+          if (raw) {
+            securoSummary = { ...securoSummary, ...JSON.parse(raw) };
+          }
+        } catch {
+          // ignore
+        }
+        return (
+          <div
+            onClick={() => {
+              openMiniApp('securo-finance');
+              hapticFeedback('light');
+            }}
+            style={{
+              backgroundColor: themeTokens.bgCard,
+              borderColor: themeTokens.borderDefault,
+            }}
+            className="p-4 rounded-3xl border shadow-md cursor-pointer transition hover:scale-[1.01] ios-active flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-emerald-600 text-white flex items-center justify-center shadow-md shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="text-xs font-bold truncate"
+                    style={{ color: themeTokens.textPrimary }}
+                  >
+                    Securo Finance & ERP
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    {securoSummary.workspaceName}
+                  </span>
+                </div>
+                <p
+                  className="text-[11px] truncate font-mono tabular-nums mt-0.5"
+                  style={{ color: themeTokens.textSecondary }}
+                >
+                  Liquid {securoSummary.currencySymbol}
+                  {Number(securoSummary.liquidAssets).toLocaleString()} · Property Equity{' '}
+                  {securoSummary.currencySymbol}
+                  {Number(securoSummary.propertyEquity).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="text-right shrink-0 font-mono tabular-nums">
+              <div className="text-sm font-extrabold text-indigo-400">
+                {securoSummary.currencySymbol}
+                {Number(securoSummary.netWorth).toLocaleString()}
+              </div>
+              <span
+                className="text-[10px] flex items-center justify-end gap-0.5"
+                style={{ color: themeTokens.textMuted }}
+              >
+                <span>Net Worth</span>
+                <ChevronRight className="w-3 h-3" />
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Installed Mini Apps Section */}
       <div className="space-y-3">
         <div className="flex justify-between items-center px-1">

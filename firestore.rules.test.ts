@@ -305,4 +305,25 @@ describe('OmniMini Super App Firestore Security Rules — Dirty Dozen Red Team S
       })
     );
   });
+
+  it('13. Rejects Orphaned or Spoofed SecuroWorkspaceSummary Write', async () => {
+    const attackerDb = getVerifiedContext('user_123').firestore();
+    await assertFails(
+      setDoc(doc(attackerDb, 'users/user_123/securoWorkspaces/ws-personal'), {
+        id: 'ws-personal',
+        userId: 'user_123',
+        name: 'Personal Wealth',
+        kind: 'personal',
+        currency: 'USD',
+        liquidAssets: 50000,
+        totalLiabilities: 10000,
+        propertyEquity: 120000,
+        netWorth: 160000,
+        accountCount: 4,
+        transactionCount: 12,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    );
+  });
 });

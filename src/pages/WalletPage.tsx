@@ -55,6 +55,27 @@ export const WalletPage: React.FC = () => {
     }
   })();
 
+  // Read Securo Finance & ERP shared workspace summary
+  const securoSharedSummary = (() => {
+    try {
+      const raw = localStorage.getItem(
+        'miniapp_store_securo-finance_securo_shared_wallet_summary'
+      );
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+    return {
+      workspaceName: 'Personal Wealth',
+      workspaceKind: 'personal',
+      currencySymbol: '$',
+      liquidAssets: 60920.5,
+      propertyEquity: 261220.0,
+      netWorth: 320000.0,
+      accountsCount: 5,
+    };
+  })();
+
   const handleTopUpConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(topUpAmount);
@@ -235,6 +256,45 @@ export const WalletPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Securo Finance & ERP Bridge Summary Card */}
+      <div
+        onClick={() => {
+          openMiniApp('securo-finance');
+          hapticFeedback('light');
+        }}
+        style={{
+          backgroundColor: themeTokens.bgCard,
+          borderColor: themeTokens.borderDefault,
+        }}
+        className="p-4 rounded-2xl border flex items-center justify-between gap-3 cursor-pointer hover:opacity-95 transition ios-active"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold truncate" style={{ color: themeTokens.textPrimary }}>
+              Securo Finance & ERP ({securoSharedSummary.workspaceName})
+            </h4>
+            <p className="text-[11px] truncate font-mono tabular-nums" style={{ color: themeTokens.textSecondary }}>
+              Liquid {securoSharedSummary.currencySymbol || '$'}
+              {Number(securoSharedSummary.liquidAssets || 0).toLocaleString()} · Equity{' '}
+              {securoSharedSummary.currencySymbol || '$'}
+              {Number(securoSharedSummary.propertyEquity || 0).toLocaleString()}
+            </p>
+          </div>
+        </div>
+        <div className="text-right shrink-0 font-mono tabular-nums">
+          <div className="text-xs font-extrabold text-indigo-400">
+            {securoSharedSummary.currencySymbol || '$'}
+            {Number(securoSharedSummary.netWorth || 0).toLocaleString()}
+          </div>
+          <div className="text-[10px]" style={{ color: themeTokens.textMuted }}>
+            Net Worth · Open
+          </div>
+        </div>
+      </div>
 
       {/* Cross-Mini-App Transaction Feed */}
       <div className="space-y-3">
