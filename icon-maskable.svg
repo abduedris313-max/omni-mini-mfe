@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Full-bleed background for Android Maskable Adaptive Icons -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="256" fill="url(#glow)"/>
+
+  <!-- Safe-zone centered emblem (80% inner circle safe zone) -->
+  <g filter="url(#shadow)" transform="translate(128, 128) scale(0.8533)">
+    <rect x="0" y="0" width="135" height="135" rx="32" fill="#ffffff" fill-opacity="0.95"/>
+    <circle cx="67.5" cy="67.5" r="28" fill="#3b82f6"/>
+    <path d="M57 67.5 L78 67.5 M67.5 57 L67.5 78" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+
+    <rect x="165" y="0" width="135" height="135" rx="32" fill="#ffffff" fill-opacity="0.95"/>
+    <rect x="195" y="30" width="75" height="75" rx="18" fill="#ec4899"/>
+    <circle cx="232.5" cy="67.5" r="16" fill="#ffffff"/>
+
+    <rect x="0" y="165" width="135" height="135" rx="32" fill="#ffffff" fill-opacity="0.95"/>
+    <rect x="30" y="195" width="75" height="75" rx="18" fill="#10b981"/>
+    <path d="M48 232.5 L63 247.5 L87 217.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="165" y="165" width="135" height="135" rx="32" fill="#ffffff" fill-opacity="0.95"/>
+    <circle cx="232.5" cy="232.5" r="32" fill="#f59e0b"/>
+    <polygon points="232.5,212 240,227 256,227 243,237 248,253 232.5,243 217,253 222,237 209,227 225,227" fill="#ffffff"/>
+
+    <circle cx="150" cy="150" r="22" fill="#0f172a" stroke="#ffffff" stroke-width="4"/>
+    <circle cx="150" cy="150" r="8" fill="#60a5fa"/>
+  </g>
+</svg>

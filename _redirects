@@ -1,0 +1,9 @@
+# Static API & SPA Redirect Rules
+/omni-mini-mfe/api/miniapps        /omni-mini-mfe/api/miniapps/index.json 200
+/omni-mini-mfe/api/developer/analytics /omni-mini-mfe/api/developer/analytics/index.json 200
+/omni-mini-mfe/api/health          /omni-mini-mfe/api/health/index.json 200
+/api/miniapps                      /api/miniapps/index.json 200
+/api/developer/analytics           /api/developer/analytics/index.json 200
+/api/health                        /api/health/index.json 200
+/omni-mini-mfe/*                   /omni-mini-mfe/index.html 200
+/*                                 /index.html 200
